@@ -10,16 +10,26 @@
  */
 
 #include <cstring>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <utility>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <vector>
+#include <rex/graphics/d3d12/create_stats.h>
 
 #include <rex/assert.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/cvar.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/command_processor.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/shared_memory.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/logging.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/math.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/ui/d3d12/d3d12_util.h>
+#include <rex/graphics/d3d12/create_stats.h>
 
 REXCVAR_DEFINE_BOOL(d3d12_tiled_shared_memory, true, "GPU/D3D12",
                     "Use tiled shared memory on D3D12")
@@ -70,6 +80,7 @@ bool D3D12SharedMemory::Initialize() {
           "This is caused by PIX being attached, which doesn't support tiled "
           "resources yet.");
     }
+    ::rex::graphics::d3d12::NoteResourceCreate("shared_memory.cpp:73", 0);
     if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesDefault,
                                                provider.GetHeapFlagCreateNotZeroed(), &buffer_desc,
                                                buffer_state_, nullptr, IID_PPV_ARGS(&buffer_)))) {
@@ -278,6 +289,7 @@ bool D3D12SharedMemory::AllocateSparseHostGpuMemoryRange(uint32_t offset_allocat
   heap_desc.Properties.Type = D3D12_HEAP_TYPE_DEFAULT;
   heap_desc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS | provider.GetHeapFlagCreateNotZeroed();
   ID3D12Heap* heap;
+  ::rex::graphics::d3d12::NoteResourceCreate("shared_memory.cpp:281", 0);
   if (FAILED(device->CreateHeap(&heap_desc, IID_PPV_ARGS(&heap)))) {
     REXGPU_ERROR("Shared memory: Failed to create a tile heap");
     return false;

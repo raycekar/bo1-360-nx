@@ -12,31 +12,56 @@
 #include "thirdparty/dxbc/DXBCChecksum.h"
 
 #include <algorithm>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <array>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <cstdint>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <cstring>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <iterator>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <memory>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <string>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <tuple>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <utility>
+#include <rex/graphics/d3d12/create_stats.h>
 
 #include <rex/assert.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/cvar.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/command_processor.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/deferred_command_list.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/render_target_cache.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/texture_cache.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/flags.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/format/dxbc.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/pipeline/shader/dxbc_translator.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/util/draw.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/xenos.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/logging.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/math.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/string.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/ui/d3d12/d3d12_provider.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/ui/d3d12/d3d12_util.h>
+#include <rex/graphics/d3d12/create_stats.h>
 
 REXCVAR_DEFINE_BOOL(native_stencil_value_output_d3d12_intel, false, "GPU/D3D12",
                     "Native stencil value output for Intel D3D12");
@@ -214,6 +239,7 @@ bool D3D12RenderTargetCache::Initialize() {
   // Creating zeroed for stable initial value with ROV (though on a real
   // console it has to be cleared anyway probably) and not to leak irrelevant
   // data when not covered by host render targets entirely.
+  ::rex::graphics::d3d12::NoteResourceCreate("render_target_cache.cpp:217", 0);
   if (FAILED(device->CreateCommittedResource(
           &ui::d3d12::util::kHeapPropertiesDefault, D3D12_HEAP_FLAG_NONE, &edram_buffer_desc,
           edram_buffer_state_, nullptr, IID_PPV_ARGS(&edram_buffer_)))) {
@@ -1605,6 +1631,7 @@ RenderTargetCache::RenderTarget* D3D12RenderTargetCache::CreateRenderTarget(Rend
   // Create zeroed for more determinism, primarily with respect to compression
   // and depth float24 / float32 mirroring.
   Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+  ::rex::graphics::d3d12::NoteResourceCreate("render_target_cache.cpp:1608", 0);
   if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesDefault,
                                              D3D12_HEAP_FLAG_NONE, &resource_desc, resource_state,
                                              &optimized_clear_value, IID_PPV_ARGS(&resource)))) {

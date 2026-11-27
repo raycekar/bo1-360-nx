@@ -10,27 +10,48 @@
  */
 
 #include <algorithm>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <cstdarg>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <cstring>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <sstream>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <utility>
+#include <rex/graphics/d3d12/create_stats.h>
 
 #include <rex/assert.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/cvar.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/dbg.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/perf/counter.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/command_processor.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/graphics_system.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/shader.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/flags.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/registers.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/util/draw.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/xenos.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/kernel/xboxkrnl/video.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/logging.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/memory/utils.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/ui/d3d12/d3d12_presenter.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/ui/d3d12/d3d12_util.h>
+#include <rex/graphics/d3d12/create_stats.h>
 
 REXCVAR_DEFINE_BOOL(d3d12_bindless, true, "GPU/D3D12", "Use bindless resources where available")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
@@ -737,6 +758,7 @@ ID3D12Resource* D3D12CommandProcessor::RequestScratchGPUBuffer(uint32_t size,
   ui::d3d12::util::FillBufferResourceDesc(buffer_desc, size,
                                           D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
   ID3D12Resource* buffer;
+  ::rex::graphics::d3d12::NoteResourceCreate("command_processor.cpp:740", 0);
   if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesDefault,
                                              provider.GetHeapFlagCreateNotZeroed(), &buffer_desc,
                                              state, nullptr, IID_PPV_ARGS(&buffer)))) {
@@ -1211,6 +1233,7 @@ bool D3D12CommandProcessor::SetupContext() {
                                           D3D12_RESOURCE_FLAG_NONE);
   // The first action will be uploading.
   gamma_ramp_buffer_state_ = D3D12_RESOURCE_STATE_COPY_DEST;
+  ::rex::graphics::d3d12::NoteResourceCreate("command_processor.cpp:1214", 0);
   if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesDefault,
                                              heap_flag_create_not_zeroed, &gamma_ramp_buffer_desc,
                                              gamma_ramp_buffer_state_, nullptr,
@@ -1220,6 +1243,7 @@ bool D3D12CommandProcessor::SetupContext() {
   }
   // The upload buffer is frame-buffered.
   gamma_ramp_buffer_desc.Width *= kQueueFrames;
+  ::rex::graphics::d3d12::NoteResourceCreate("command_processor.cpp:1223", 0);
   if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesUpload,
                                              heap_flag_create_not_zeroed, &gamma_ramp_buffer_desc,
                                              D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
@@ -2023,6 +2047,7 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
             fxaa_source_texture_desc.SampleDesc.Quality = 0;
             fxaa_source_texture_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
             fxaa_source_texture_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+            ::rex::graphics::d3d12::NoteResourceCreate("command_processor.cpp:2026", 0);
             if (FAILED(device->CreateCommittedResource(
                     &ui::d3d12::util::kHeapPropertiesDefault, provider.GetHeapFlagCreateNotZeroed(),
                     &fxaa_source_texture_desc, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
@@ -2795,6 +2820,7 @@ bool D3D12CommandProcessor::IssueDraw_MemexportReadbackFastPath(uint32_t total_s
     D3D12_RESOURCE_DESC buffer_desc;
     ui::d3d12::util::FillBufferResourceDesc(buffer_desc, size, D3D12_RESOURCE_FLAG_NONE);
     ID3D12Resource* buffer = nullptr;
+    ::rex::graphics::d3d12::NoteResourceCreate("command_processor.cpp:2798", 0);
     if (FAILED(device->CreateCommittedResource(
             &ui::d3d12::util::kHeapPropertiesReadback, provider.GetHeapFlagCreateNotZeroed(),
             &buffer_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&buffer)))) {
@@ -2915,6 +2941,7 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
     D3D12_RESOURCE_DESC buffer_desc;
     ui::d3d12::util::FillBufferResourceDesc(buffer_desc, size, D3D12_RESOURCE_FLAG_NONE);
     ID3D12Resource* buffer = nullptr;
+    ::rex::graphics::d3d12::NoteResourceCreate("command_processor.cpp:2918", 0);
     if (FAILED(device->CreateCommittedResource(
             &ui::d3d12::util::kHeapPropertiesReadback, provider.GetHeapFlagCreateNotZeroed(),
             &buffer_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&buffer)))) {
@@ -2978,6 +3005,7 @@ bool D3D12CommandProcessor::IssueCopy_ReadbackResolvePath() {
       ui::d3d12::util::FillBufferResourceDesc(buffer_desc, downscale_buffer_size,
                                               D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
       ID3D12Resource* buffer = nullptr;
+      ::rex::graphics::d3d12::NoteResourceCreate("command_processor.cpp:2981", 0);
       if (FAILED(device->CreateCommittedResource(
               &ui::d3d12::util::kHeapPropertiesDefault, provider.GetHeapFlagCreateNotZeroed(),
               &buffer_desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
@@ -4787,6 +4815,7 @@ ID3D12Resource* D3D12CommandProcessor::RequestReadbackBuffer(uint32_t size) {
     D3D12_RESOURCE_DESC buffer_desc;
     ui::d3d12::util::FillBufferResourceDesc(buffer_desc, size, D3D12_RESOURCE_FLAG_NONE);
     ID3D12Resource* buffer;
+    ::rex::graphics::d3d12::NoteResourceCreate("command_processor.cpp:4790", 0);
     if (FAILED(device->CreateCommittedResource(
             &ui::d3d12::util::kHeapPropertiesReadback, provider.GetHeapFlagCreateNotZeroed(),
             &buffer_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&buffer)))) {
@@ -4828,6 +4857,7 @@ bool D3D12CommandProcessor::InitializeOcclusionQueryResources() {
   D3D12_RESOURCE_DESC buffer_desc;
   ui::d3d12::util::FillBufferResourceDesc(buffer_desc, sizeof(uint64_t) * kMaxOcclusionQueries,
                                           D3D12_RESOURCE_FLAG_NONE);
+  ::rex::graphics::d3d12::NoteResourceCreate("command_processor.cpp:4831", 0);
   if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesReadback,
                                              GetD3D12Provider().GetHeapFlagCreateNotZeroed(),
                                              &buffer_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,

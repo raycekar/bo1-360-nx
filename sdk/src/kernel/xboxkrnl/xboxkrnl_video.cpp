@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -111,6 +112,8 @@ REXCVAR_DEFINE_BOOL(log_guest_profile, true, "Log",
 REXCVAR_DEFINE_BOOL(log_host_profile, false, "Log",
                     "Every 10 s, log the hottest host functions of the guest threads (instruction pointer sampled "
                     "about 500 times a second, named through the PDB beside the exe). For performance work.");
+REXCVAR_DEFINE_BOOL(log_host_profile_lines, false, "Log",
+                    "With log_host_profile: count by source line (file:line) instead of by function");
 REXCVAR_DEFINE_BOOL(log_frame_stats, true, "Log",
                     "Every 10 s, log the guest frame rate (frames, fps, average and worst frame time)");
 
@@ -515,6 +518,9 @@ static void GuestSamplerLoop() {
   }
 }
 
+// Set by CountGuestFrame for a frame of 100 ms or more; the host sampler then logs what the threads did meanwhile.
+static std::atomic<double> g_last_hitch_ms{0.0};
+
 #if REX_PLATFORM_WIN32
 // Host sampling profiler (log_host_profile): suspends each guest thread for a moment about 500 times a second, reads
 // its instruction pointer and, every 10 s, logs the 30 hottest (thread, function) pairs. Functions are named through
@@ -529,6 +535,8 @@ static void HostSamplerLoop() {
   auto sym_init = reinterpret_cast<SymInitializeFn>(GetProcAddress(dbghelp, "SymInitialize"));
   auto sym_from_addr = reinterpret_cast<SymFromAddrFn>(GetProcAddress(dbghelp, "SymFromAddr"));
   auto sym_options = reinterpret_cast<SymSetOptionsFn>(GetProcAddress(dbghelp, "SymSetOptions"));
+  using SymGetLineFn = BOOL(WINAPI*)(HANDLE, DWORD64, PDWORD, IMAGEHLP_LINE64*);
+  auto sym_line = reinterpret_cast<SymGetLineFn>(GetProcAddress(dbghelp, "SymGetLineFromAddr64"));
   if (!sym_init || !sym_from_addr) return;
   if (sym_options) sym_options(0x00000002 /*SYMOPT_UNDNAME*/ | 0x00000004 /*SYMOPT_DEFERRED_LOADS*/);
   const HANDLE process = GetCurrentProcess();
@@ -540,6 +548,7 @@ static void HostSamplerLoop() {
   std::vector<std::pair<uint32_t, uint64_t>> samples;
   std::unordered_map<uint64_t, std::string> names;  // rip -> function
   std::unordered_map<std::string, uint32_t> counts;  // "tX name" -> samples
+  std::deque<std::pair<std::chrono::steady_clock::time_point, std::string>> recent;  // last 1.5 s, for hitches
   auto listed = clock::now() - std::chrono::seconds(10);
   auto window = clock::now();
   uint32_t passes = 0;
@@ -603,11 +612,47 @@ static void HostSamplerLoop() {
         std::string name = sym_from_addr(process, rip, &displacement, symbol)
                                ? std::string(symbol->Name)
                                : fmt::format("{:016X}", rip);
+        if (REXCVAR_GET(log_host_profile_lines) && sym_line) {
+          // file:line from the line tables: for generated code the line shows the PowerPC instruction (comment).
+          IMAGEHLP_LINE64 line = {};
+          line.SizeOfStruct = sizeof(line);
+          DWORD line_displacement = 0;
+          if (sym_line(process, rip, &line_displacement, &line) && line.FileName) {
+            const char* file = line.FileName;
+            for (const char* p = line.FileName; *p; ++p) {
+              if (*p == '/' || *p == '\\') file = p + 1;
+            }
+            name += fmt::format(" {}:{}", file, line.LineNumber);
+          }
+        }
         it = names.emplace(rip, std::move(name)).first;
       }
-      ++counts[thread_labels[id] + " " + it->second];
+      std::string key = thread_labels[id] + " " + it->second;
+      ++counts[key];
+      recent.emplace_back(now, std::move(key));
     }
     ++passes;
+    // Hitch attribution: what every thread did during the slow frame (waits included: who waited on what).
+    while (!recent.empty() && now - recent.front().first > std::chrono::milliseconds(1500)) recent.pop_front();
+    if (const double hitch_ms = g_last_hitch_ms.exchange(0.0); hitch_ms > 0.0) {
+      const auto from = now - std::chrono::microseconds(int64_t((hitch_ms + 20.0) * 1000.0));
+      std::unordered_map<std::string, uint32_t> during;
+      uint32_t total = 0;
+      for (auto& [t, key] : recent) {
+        if (t >= from) {
+          ++during[key];
+          ++total;
+        }
+      }
+      std::vector<std::pair<std::string, uint32_t>> top(during.begin(), during.end());
+      const size_t n = std::min<size_t>(25, top.size());
+      std::partial_sort(top.begin(), top.begin() + n, top.end(),
+                        [](const auto& a, const auto& b) { return a.second > b.second; });
+      REXKRNL_INFO("[hitch-prof] {:.0f} ms frame, {} samples; top {} (thread function):", hitch_ms, total, n);
+      for (size_t i = 0; i < n; ++i) {
+        REXKRNL_INFO("[hitch-prof] {:4} {}", top[i].second, top[i].first);
+      }
+    }
     if (now - window >= std::chrono::seconds(10)) {
       // Leave out time blocked in the OS (waits, sleeps, message loops): the list is about work.
       std::vector<std::pair<std::string, uint32_t>> top;
@@ -662,7 +707,10 @@ static void CountGuestFrame() {
   worst_ms = std::max(worst_ms, ms);
   if (ms > 33.4) ++slow;
   static bool started = false;
-  if (ms >= 100.0 && started) REXKRNL_WARN("[hitch] frame took {:.1f} ms", ms);
+  if (ms >= 100.0 && started) {
+    REXKRNL_WARN("[hitch] frame took {:.1f} ms", ms);
+    g_last_hitch_ms.store(ms);
+  }
   started = true;
   const double window_ms = std::chrono::duration<double, std::milli>(now - window_start).count();
   if (window_ms >= 10000.0) {

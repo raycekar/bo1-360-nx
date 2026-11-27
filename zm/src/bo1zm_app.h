@@ -46,6 +46,16 @@ class Bo1zmApp : public rex::ReXApp {
     if (rex::cvar::GetFlagSource("launch_title_map") == rex::cvar::Source::kDefault) {
       rex::cvar::SetFlagByName("launch_title_map", "default_mp.xex=bo1mp.exe;default.xex=bo1zm.exe");
     }
+    // No CPU readback of shader memexport. BO1 memexports every frame to changing addresses, so the double-buffered
+    // readback missed almost every time and fell back to a full GPU sync per draw (~800 buffer creations and GPU
+    // idles a second with zombies on screen: Kino at 27-36 fps). The game does not read those results on the CPU;
+    // without readback Kino with zombies runs at 52-60 fps and looks the same.
+    // (GPU plugin settings: registered only when rexgpu-xenos.dll loads, hence SetAppDefault, which queues them.)
+    rex::cvar::SetAppDefault("readback_memexport", "false");
+    // Texture cache sized for a PC GPU instead of the SDK's 360-like 24 MB render-to-texture / 384 MB soft limits.
+    rex::cvar::SetAppDefault("texture_cache_memory_limit_render_to_texture", "128");
+    rex::cvar::SetAppDefault("texture_cache_memory_limit_soft", "1024");
+    rex::cvar::SetAppDefault("texture_cache_memory_limit_hard", "2048");
   }
 
   void OnConfigurePaths(rex::PathConfig& paths) override {

@@ -34,9 +34,12 @@
 #include <rex/system/xsymboliclink.h>
 #include <rex/system/xthread.h>
 
-REXCVAR_DEFINE_BOOL(kernel_fast_event_poll, true, "Kernel",
+REXCVAR_DEFINE_BOOL(kernel_fast_event_poll, false, "Kernel",
                     "Answer zero-timeout polls of unsignaled events without a host wait (BO1's job system polls "
                     "about 200,000 times a second)");
+REXCVAR_DEFINE_BOOL(kernel_poll_yield, false, "Kernel",
+                    "Give up the core (SwitchToThread) after a zero-timeout wait that finds nothing. Off: games that spin on "
+                    "a poll (BO1's job system, ~200,000 times a second) lost their time slice on every poll.");
 REXCVAR_DEFINE_BOOL(log_wait_profile, false, "Log",
                     "Every 10 s, log where guest threads are blocked in waits (thread, caller, caller's caller, "
                     "total time). For performance work.");
@@ -381,7 +384,7 @@ X_STATUS XObject::Wait(uint32_t wait_reason, uint32_t processor_mode, uint32_t a
     case rex::thread::WaitResult::kTimeout:
       // Only after a zero-timeout poll. After a real timed wait the thread has already given up
       // the core for the whole timeout.
-      if (!opt_timeout || *opt_timeout == 0) {
+      if ((!opt_timeout || *opt_timeout == 0) && REXCVAR_GET(kernel_poll_yield)) {
         rex::thread::MaybeYield();
       }
       LogLongTimeout("Wait", timeout_ms, this);

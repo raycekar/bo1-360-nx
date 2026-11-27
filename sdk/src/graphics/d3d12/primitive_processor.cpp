@@ -10,17 +10,28 @@
  */
 
 #include <algorithm>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <cstdint>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <memory>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <utility>
+#include <rex/graphics/d3d12/create_stats.h>
 
 #include <rex/assert.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/command_processor.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/deferred_command_list.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/primitive_processor.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/logging.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/ui/d3d12/d3d12_provider.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/ui/d3d12/d3d12_util.h>
+#include <rex/graphics/d3d12/create_stats.h>
 
 namespace rex::graphics::d3d12 {
 
@@ -94,6 +105,7 @@ bool D3D12PrimitiveProcessor::InitializeBuiltinIndexBuffer(
   ui::d3d12::util::FillBufferResourceDesc(resource_desc, UINT64(size_bytes),
                                           D3D12_RESOURCE_FLAG_NONE);
   Microsoft::WRL::ComPtr<ID3D12Resource> draw_resource;
+  ::rex::graphics::d3d12::NoteResourceCreate("primitive_processor.cpp:97", 0);
   if (FAILED(device->CreateCommittedResource(
           &ui::d3d12::util::kHeapPropertiesDefault, provider.GetHeapFlagCreateNotZeroed(),
           &resource_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&draw_resource)))) {
@@ -104,6 +116,7 @@ bool D3D12PrimitiveProcessor::InitializeBuiltinIndexBuffer(
     return false;
   }
   Microsoft::WRL::ComPtr<ID3D12Resource> upload_resource;
+  ::rex::graphics::d3d12::NoteResourceCreate("primitive_processor.cpp:107", 0);
   if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesUpload,
                                              provider.GetHeapFlagCreateNotZeroed(), &resource_desc,
                                              D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,

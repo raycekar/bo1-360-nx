@@ -339,6 +339,23 @@ ApplyResult SetFlagFromSource(std::string_view name, std::string_view value, Sou
 
 }  // namespace
 
+bool SetAppDefault(std::string_view name, std::string_view value) {
+  if (GetFlagInfo(name) != nullptr) {
+    if (GetFlagSource(name) != Source::kDefault) {
+      return false;
+    }
+    return SetFlagFromSource(name, value, Source::kRuntime) == ApplyResult::kApplied;
+  }
+  // Not registered yet: queue it like a config value, unless the config file or command line already queued one.
+  std::lock_guard lock(GetRegistryMutex());
+  auto& pending = GetPendingValuesStorage()[std::string(name)];
+  if (pending.config || pending.cmdline) {
+    return false;
+  }
+  pending.config = std::string(value);
+  return true;
+}
+
 bool SetFlagByName(std::string_view name, std::string_view value) {
   return SetFlagFromSource(name, value, Source::kRuntime) == ApplyResult::kApplied;
 }

@@ -191,6 +191,11 @@ void UnregisterFlag(std::string_view name);
 
 bool SetFlagByName(std::string_view name, std::string_view value);
 
+// An app's own default for a flag: applied now if the flag exists and nothing (config, command line) has set it, or
+// queued for when a runtime-loaded module (the GPU plugin) registers it, again only if config and command line leave
+// it alone. Returns true if applied or queued.
+bool SetAppDefault(std::string_view name, std::string_view value);
+
 // Applies a value parsed off the command line. Returns false only when the
 // value is rejected (unparseable, or outside the flag's constraints); a value
 // skipped because a higher-priority source already won returns true.

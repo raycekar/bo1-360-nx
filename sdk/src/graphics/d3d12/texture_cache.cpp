@@ -10,27 +10,48 @@
  */
 
 #include <algorithm>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <array>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <cfloat>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <cstddef>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <cstring>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <memory>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <utility>
+#include <rex/graphics/d3d12/create_stats.h>
 
 #include <rex/assert.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/dbg.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/command_processor.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/shared_memory.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/d3d12/texture_cache.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/flags.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/pipeline/texture/info.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/pipeline/texture/util.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/graphics/xenos.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/logging.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/perf/counter.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/math.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/ui/d3d12/d3d12_upload_buffer_pool.h>
+#include <rex/graphics/d3d12/create_stats.h>
 #include <rex/ui/d3d12/d3d12_util.h>
+#include <rex/graphics/d3d12/create_stats.h>
 
 namespace rex::graphics::d3d12 {
 
@@ -1187,6 +1208,7 @@ bool D3D12TextureCache::EnsureScaledResolveMemoryCommitted(uint32_t start_unscal
     heap_desc.Properties.Type = D3D12_HEAP_TYPE_DEFAULT;
     heap_desc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS | provider.GetHeapFlagCreateNotZeroed();
     Microsoft::WRL::ComPtr<ID3D12Heap> scaled_resolve_heap;
+    ::rex::graphics::d3d12::NoteResourceCreate("texture_cache.cpp:1190", 0);
     if (FAILED(device->CreateHeap(&heap_desc, IID_PPV_ARGS(&scaled_resolve_heap)))) {
       REXGPU_ERROR("D3D12TextureCache: Failed to create a scaled resolve tile heap");
       return false;
@@ -1549,6 +1571,7 @@ std::unique_ptr<TextureCache::Texture> D3D12TextureCache::CreateTexture(TextureK
   // Assuming untiling will be the next operation.
   D3D12_RESOURCE_STATES resource_state = D3D12_RESOURCE_STATE_COPY_DEST;
   Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+  ::rex::graphics::d3d12::NoteResourceCreate("texture_cache.cpp:1552", 0);
   if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesDefault,
                                              provider.GetHeapFlagCreateNotZeroed(), &desc,
                                              resource_state, nullptr, IID_PPV_ARGS(&resource)))) {
@@ -2008,6 +2031,7 @@ ID3D12Resource* D3D12TextureCache::D3D12Texture::GetOrCreate3DAs2DResource(
 
   D3D12_RESOURCE_STATES initial_state = D3D12_RESOURCE_STATE_COPY_DEST;
   Microsoft::WRL::ComPtr<ID3D12Resource> resource_2d;
+  ::rex::graphics::d3d12::NoteResourceCreate("texture_cache.cpp:2011", 0);
   if (FAILED(device->CreateCommittedResource(&ui::d3d12::util::kHeapPropertiesDefault,
                                              provider.GetHeapFlagCreateNotZeroed(), &desc,
                                              initial_state, nullptr, IID_PPV_ARGS(&resource_2d)))) {
