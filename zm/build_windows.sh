@@ -17,5 +17,5 @@ cmake -S "$ZM" -B "$OUT" -G Ninja \
   -DREXGLUE_USE_VULKAN=ON -DREXGLUE_RECOMP_DEBUG_INFO=line-tables-only \
   -DGIT_EXECUTABLE=/nonexistent/git "-DREXGLUE_OUTPUT_DIR=$OUT/sdk-out" \
   "-DREXSDK_DIR=$ROOT/sdk"
-# Low priority (nice 19, idle I/O) so the build does not slow other guests on the shared host.
-nice -n 19 ionice -c3 cmake --build "$OUT" --target bo1zm -j "${JOBS:-1}"
+# Low priority + limits (tools/lowprio.sh: nice 19, idle I/O, CPUQuota, MemoryMax) so the build cannot overload the host.
+"$ROOT/tools/lowprio.sh" cmake --build "$OUT" --target bo1zm -j "${JOBS:-1}"

@@ -5,7 +5,7 @@ set -euo pipefail
 ZM="$(cd "$(dirname "$0")" && pwd)"
 BIN="${REXGLUE_BIN:-$ZM/../sdk/out/linux-amd64}"
 export LD_LIBRARY_PATH="$BIN${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-(cd "$ZM" && "$BIN/rexglue" codegen --ignore-stamp bo1zm_manifest.toml > codegen.log 2>&1) || { echo "codegen failed, see zm/codegen.log" >&2; exit 1; }
+(cd "$ZM" && "$ZM/../tools/lowprio.sh" "$BIN/rexglue" codegen --ignore-stamp bo1zm_manifest.toml > codegen.log 2>&1) || { echo "codegen failed, see zm/codegen.log" >&2; exit 1; }
 tail -n 2 "$ZM/codegen.log"
 # Register-as-local fix-ups (needed only with speed.toml in the manifest's includes; harmless without):
 PY="${PYTHON:-$(cd "$(dirname "$0")/../.." && pwd)/.venv/bin/python}"

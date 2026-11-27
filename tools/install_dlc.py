@@ -1,9 +1,9 @@
 """Installs BO1 (and BO2) DLC packages (Xbox 360 STFS "LIVE" files) the way the runtime looks for them.
 
 The runtime's content manager (sdk/src/system/xam/content_manager.cpp) lists marketplace content as folders under
-  <user root>/0000000000000000/415608C3/00000002/<package file name>/
+  <user root>/0000000000000000/41560855/00000002/<package file name>/
 and reads each one's name and license bits from
-  <user root>/0000000000000000/415608C3/Headers/00000002/<package file name>.header
+  <user root>/0000000000000000/41560855/Headers/00000002/<package file name>.header
 (an XCONTENT_AGGREGATE_DATA, 0x148 bytes, followed by the license mask). The game then mounts each package and
 looks for its dlcN.id / dlczmN.id file. This script unpacks the packages into that layout, once, on the PC.
 
@@ -115,7 +115,7 @@ def data_dir():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("source", help="folder with the DLC packages (DLC/415608C3/00000002 of a 360 dump)")
+    ap.add_argument("source", help="folder with the DLC packages (DLC/41560855/00000002 of a 360 dump)")
     ap.add_argument("--out", default=os.path.join(data_dir(), "content"))
     ap.add_argument("--all", action="store_true", help="keep every language and the multiplayer files")
     ap.add_argument("--multiplayer", action="store_true", help="keep English Multiplayer and Zombies content")
