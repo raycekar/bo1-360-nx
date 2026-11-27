@@ -69,12 +69,17 @@ All 659 `.gsc` and 145 `.csc` scripts were extracted from the Zombies zones, the
 
 ## Open questions (need a running build)
 
-- Does the Zombies client lay out 3 and 4 views itself? The engine values point to yes, but no code path has been
-  run yet.
+- ~~Does the Zombies client lay out 3 and 4 views itself?~~ Yes (static analysis): a built-in rect table has
+  layouts for 1-4 players; 3 players = two top quadrants + a full-width bottom half. See `4p-hud-notes.md`.
 - How fast is it at 4 views with the exact Xenos renderer? bo2-360-nx needed a native renderer for speed on the
   Switch. A PC should run the Xenos renderer at 4 views.
-- Fixed pools that scale with the player count, for example HUD elements (`level.hudelem_count`) and client-side
-  entities.
+- ~~Fixed pools that scale with the player count?~~ Static analysis says they are safe:
+  - Server pools do not depend on local vs online players, and 4-player online Zombies already uses them. HUD
+    elements are one global pool of 1024 (132 bytes each, `sub_8225EDF8`, "out of hudelems"). `level.hudelem_count` is
+    only a debug counter (`hudelem_count()` is empty).
+  - Client arrays (strides 0x16F0, 0xCE550, 0x7990 per local client, `sub_823FB9C0`) are allocated at client init
+    (`sub_823D7F88`) for N local clients: N = 4 in the front end, `splitscreen_playerCount` (at least 2) in split
+    screen, else 1. `splitscreen_playerCount` is an int dvar, default 1, range 1-4 (`sub_823D86xx`).
 
 ## How to reproduce
 

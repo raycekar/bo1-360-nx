@@ -16,4 +16,5 @@ cmake -S "$ROOT/sdk" -B "$OUT" -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_FLAGS=-march=x86-64-v2 -DCMAKE_CXX_FLAGS=-march=x86-64-v2 \
   -DGIT_EXECUTABLE=/nonexistent/git -DREXGLUE_ENABLE_TRACY=OFF \
   "-DCMAKE_PROJECT_ReXGlue_INCLUDE=$ROOT/cmake/host_tools_inject.cmake"
-cmake --build "$OUT" --target rexglue xexdump -j "${JOBS:-2}"
+# Low priority (nice 19, idle I/O) so the build does not slow other guests on the shared host.
+nice -n 19 ionice -c3 cmake --build "$OUT" --target rexglue xexdump -j "${JOBS:-1}"

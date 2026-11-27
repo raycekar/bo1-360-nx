@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cross-builds bo1mp.exe (BO1 Multiplayer, TU11 default_mp.xex) for Windows x64 on Linux: LLVM clang + lld-link with the
 # xwin MSVC CRT / Windows SDK splat (cmake/windows-xwin.cmake). Needs generated/default_mp from codegen.sh.
-# Output: $OUT/bo1mp.exe (default ../../out/build-win-mp). JOBS (default 2) parallel compiles.
+# Output: $OUT/bo1mp.exe (default ../../out/build-win-mp). JOBS (default 1) parallel compiles.
 set -euo pipefail
 MP="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$MP/.."
@@ -17,4 +17,5 @@ cmake -S "$MP" -B "$OUT" -G Ninja \
   -DREXGLUE_USE_VULKAN=ON -DREXGLUE_RECOMP_DEBUG_INFO=none \
   -DGIT_EXECUTABLE=/nonexistent/git "-DREXGLUE_OUTPUT_DIR=$OUT/sdk-out" \
   "-DREXSDK_DIR=$ROOT/sdk"
-cmake --build "$OUT" --target bo1mp -j "${JOBS:-2}"
+# Low priority (nice 19, idle I/O) so the build does not slow other guests on the shared host.
+nice -n 19 ionice -c3 cmake --build "$OUT" --target bo1mp -j "${JOBS:-1}"

@@ -9,7 +9,14 @@ seen on screen yet; use it as the checklist for the first 4-player test.
 |---|---|---|
 | 1 | 1280x720 | 16:9 |
 | 2 (360) | 1280x360, top/bottom | 32:9 |
-| 3-4 | 640x360, quadrants | 16:9 |
+| 3 | players 1-2: 640x360 quadrants on top; player 3: 1280x360 across the bottom | 16:9, 32:9 |
+| 4 | 640x360, quadrants | 16:9 |
+
+Source: the static rect table at TU11 `0x8262C1A0` (32 rects `{x,y,w,h}` as fractions, `[wideScreen][count-1][slot]`;
+both `wideScreen` halves are the same). The init function `sub_821AEBF0` copies it to `0x82800088` (and two work
+copies). `sub_821AEED0(localClient, slot, count)` reads it and writes the client's viewport; the dvars
+`zombietron` and `zombieStopSplitScreen` force the full-screen rect. `sub_823D6EA0` keeps a focus stack and lays
+out all 4 local clients again after a change (`cl_viewport_lerptime`).
 
 A quadrant has the **same height** as a 2-player view and **half the width**. The scripts' split-screen tweaks are
 almost all vertical (`.y`) offsets, so they still fit. Horizontally centered elements stay centered. The risks are
