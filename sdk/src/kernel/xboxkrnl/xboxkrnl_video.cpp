@@ -15,6 +15,10 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <thread>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 #include <string>
 
 #include <rex/cvar.h>
@@ -32,6 +36,8 @@
 #include <rex/system/export_resolver.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xtypes.h>
+#include <rex/system/thread_state.h>
+#include <rex/system/xthread.h>
 #include <rex/ui/flags.h>
 
 namespace {
@@ -86,6 +92,9 @@ void WarnNoGpuEmulation(const char* export_name, std::atomic<bool>& warned) {
 }
 }  // namespace
 
+REXCVAR_DEFINE_BOOL(log_guest_profile, true, "Log",
+                    "Every 10 s, log where the guest threads spend their time: the return address (lr) of each "
+                    "guest thread, sampled about 1000 times a second (map the addresses with tools/crash_triage.py)");
 REXCVAR_DEFINE_BOOL(log_frame_stats, true, "Log",
                     "Every 10 s, log the guest frame rate (frames, fps, average and worst frame time)");
 
@@ -441,9 +450,63 @@ u32 VdRetrainEDRAM_entry(u32 unk0, u32 unk1, u32 unk2, u32 unk3, u32 unk4, u32 u
   return 0;
 }
 
+// Sampling profiler for PC test reports. The recompiled code sets ctx.lr before every call, so the lr of a guest
+// thread names the function it is in (or, in a leaf, its caller). A host thread reads it about 1000 times a second
+// (a racy read of one aligned word, harmless) and logs the 25 most frequent (thread, lr) pairs every 10 s. A thread
+// that waits shows the lr of its wait call. Cost: one pass over the guest threads per millisecond.
+static void GuestSamplerLoop() {
+  using clock = std::chrono::steady_clock;
+  std::vector<rex::system::object_ref<rex::system::XThread>> threads;
+  std::unordered_map<uint64_t, uint32_t> counts;  // (thread id << 32) | lr
+  std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> thread_info;  // id -> (start address, main)
+  auto listed = clock::now() - std::chrono::seconds(10);
+  auto window = clock::now();
+  uint32_t passes = 0;
+  for (;;) {
+    const auto now = clock::now();
+    if (now - listed >= std::chrono::seconds(1)) {
+      threads = REX_KERNEL_OBJECTS()->GetObjectsByType<rex::system::XThread>();
+      listed = now;
+    }
+    for (auto& t : threads) {
+      if (!t || !t->is_guest_thread()) continue;
+      auto* ts = t->thread_state();
+      if (!ts || !ts->context()) continue;
+      const uint32_t lr = static_cast<uint32_t>(ts->context()->lr);
+      if (lr < 0x82000000u || lr >= 0x84000000u) continue;
+      ++counts[(uint64_t(t->thread_id()) << 32) | lr];
+      thread_info[t->thread_id()] = {t->creation_params()->start_address, t->main_thread() ? 1u : 0u};
+    }
+    ++passes;
+    if (now - window >= std::chrono::seconds(10)) {
+      std::vector<std::pair<uint64_t, uint32_t>> top(counts.begin(), counts.end());
+      const size_t n = std::min<size_t>(25, top.size());
+      std::partial_sort(top.begin(), top.begin() + n, top.end(),
+                        [](const auto& a, const auto& b) { return a.second > b.second; });
+      REXKRNL_INFO("[prof] {:.0f} s, {} passes over the guest threads; top {} (thread, lr):",
+                   std::chrono::duration<double>(now - window).count(), passes, n);
+      for (size_t i = 0; i < n; ++i) {
+        const uint32_t id = uint32_t(top[i].first >> 32);
+        const auto& info = thread_info[id];
+        REXKRNL_INFO("[prof] {:5.1f}% t{:X} (start {:08X}{}) lr {:08X}", 100.0 * top[i].second / passes, id,
+                     info.first, info.second ? " main" : "", uint32_t(top[i].first));
+      }
+      counts.clear();
+      passes = 0;
+      window = now;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+}
+
 // Guest frame rate for PC test reports: one log line every 10 s (frames, fps, average/worst frame time and frames over
 // 33 ms). VdSwap is the guest's end of frame and runs on one thread. Off: log_frame_stats = false.
 static void CountGuestFrame() {
+  static bool sampler_started = false;
+  if (!sampler_started) {
+    sampler_started = true;
+    if (REXCVAR_GET(log_guest_profile)) std::thread(GuestSamplerLoop).detach();
+  }
   if (!REXCVAR_GET(log_frame_stats)) return;
   using clock = std::chrono::steady_clock;
   static clock::time_point window_start = clock::now();
