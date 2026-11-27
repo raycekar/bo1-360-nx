@@ -10,19 +10,41 @@
  */
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstring>
+#include <atomic>
+#include <chrono>
 #include <utility>
+#include <atomic>
+#include <chrono>
 
 #include <rex/assert.h>
+#include <atomic>
+#include <chrono>
 #include <rex/exception_handler.h>
+#include <atomic>
+#include <chrono>
 #include <rex/logging.h>
+#include <atomic>
+#include <chrono>
 #include <rex/memory.h>
+#include <atomic>
+#include <chrono>
 #include <rex/platform.h>
+#include <atomic>
+#include <chrono>
 #include <rex/system/mmio_handler.h>
+#include <atomic>
+#include <chrono>
 #include <rex/types.h>
+#include <atomic>
+#include <chrono>
 
 #if REX_PLATFORM_WIN32
 #include <windows.h>
+#include <atomic>
+#include <chrono>
 #endif
 
 using namespace rex::arch;
@@ -418,6 +440,20 @@ bool MMIOHandler::ExceptionCallback(arch::Exception* ex) {
     return false;
   }
   bool is_write = operation == arch::Exception::AccessViolationOperation::kWrite;
+  {
+    // Write-watch faults per 10 s (each one is an exception on a game thread plus an invalidation).
+    static std::atomic<uint64_t> faults{0};
+    static std::atomic<int64_t> window{0};
+    faults.fetch_add(1, std::memory_order_relaxed);
+    const int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+                            std::chrono::steady_clock::now().time_since_epoch()).count();
+    int64_t w = window.load(std::memory_order_relaxed);
+    if (w == 0) {
+      window.compare_exchange_strong(w, now);
+    } else if (now - w >= 10 && window.compare_exchange_strong(w, now)) {
+      REXSYS_INFO("[watch] 10 s: {} access-violation faults (guest memory watches)", faults.exchange(0));
+    }
+  }
   if (ex->fault_address() < uint64_t(virtual_membase_) ||
       ex->fault_address() > uint64_t(memory_end_)) {
     // Quick kill anything outside our mapping.

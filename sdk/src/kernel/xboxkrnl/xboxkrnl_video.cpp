@@ -112,6 +112,8 @@ REXCVAR_DEFINE_BOOL(log_guest_profile, true, "Log",
 REXCVAR_DEFINE_BOOL(log_host_profile, false, "Log",
                     "Every 10 s, log the hottest host functions of the guest threads (instruction pointer sampled "
                     "about 500 times a second, named through the PDB beside the exe). For performance work.");
+REXCVAR_DEFINE_STRING(log_host_profile_thread, "", "Log",
+                      "With log_host_profile: list only this thread's functions (label as logged, e.g. t3)");
 REXCVAR_DEFINE_BOOL(log_host_profile_lines, false, "Log",
                     "With log_host_profile: count by source line (file:line) instead of by function");
 REXCVAR_DEFINE_BOOL(log_frame_stats, true, "Log",
@@ -665,6 +667,22 @@ static void HostSamplerLoop() {
           continue;
         }
         top.push_back({key, count});
+      }
+      // Busy share per thread (everything but OS waits), to spot the one thread that is the bottleneck.
+      {
+        std::unordered_map<std::string, uint32_t> per_thread;
+        for (auto& [key, count] : top) per_thread[key.substr(0, key.find(' '))] += count;
+        std::vector<std::pair<std::string, uint32_t>> threads_busy(per_thread.begin(), per_thread.end());
+        std::sort(threads_busy.begin(), threads_busy.end(),
+                  [](const auto& a, const auto& b) { return a.second > b.second; });
+        std::string line;
+        for (size_t i = 0; i < threads_busy.size() && i < 12; ++i) {
+          line += fmt::format(" {} {:.0f}%", threads_busy[i].first, 100.0 * threads_busy[i].second / passes);
+        }
+        REXKRNL_INFO("[hprof] busy per thread:{}", line);
+      }
+      if (const std::string only = REXCVAR_GET(log_host_profile_thread); !only.empty()) {
+        std::erase_if(top, [&](const auto& e) { return e.first.rfind(only + " ", 0) != 0; });
       }
       const size_t n = std::min<size_t>(40, top.size());
       std::partial_sort(top.begin(), top.begin() + n, top.end(),

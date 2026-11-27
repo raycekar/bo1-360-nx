@@ -18,6 +18,7 @@ set(BO1ZM_SOURCES
     src/bo1zm_script_patch.cpp
     src/bo1zm_debug.cpp
     src/bo1zm_memory.cpp
+    src/bo1zm_jobs.cpp
 )
 
 if(WIN32)
