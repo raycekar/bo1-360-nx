@@ -1,0 +1,20 @@
+# ============================================================================
+#  BO1 Multiplayer (TU11 default_mp.xex 0.0.11.3) - manual declarations for the codegen
+#  Included from bo1mp_manifest.toml, flat schema (sections at the root).
+#  Valid address range: 0x82000000 - 0x848A0000 (base + 42,598,400 bytes).
+# ============================================================================
+
+# --- setjmp / longjmp (root keys: must stay ABOVE any table) -----------------
+# The same CRT routines as default.xex's 0x825ED9E0 / 0x825EDDE0 (zm/overrides.toml): setjmp matches word for word
+# with 16-bit immediates masked; longjmp found by its reload (lfd f14, 0(r7) at 0x826B585C).
+setjmp_address = 0x826B5450
+longjmp_address = 0x826B5820
+
+# Register-as-local speed options OFF for the bring-up, as in zm/.
+skip_msr = true
+
+[functions]
+
+# --- Tail-branch targets, round 1 (tools/codegen_fix_unresolved.py) ---
+"0x823EB008" = { }   # stw r4, 0x20(r3); blr   <- 0x82461FD0
+"0x82428728" = { }   # lwz r11, 0x1dc(r4); cmpwi cr6, r11, 0x400; blt cr6, 0x82428750; lis r10, -0x7d73; mulli r9, r11, 0x320; lwz r10, 0x7148(r10)   <- 0x8242882C

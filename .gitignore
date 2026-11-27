@@ -71,3 +71,4 @@ __pycache__/
 __pycache__/
 /sdk/out/
 /zm/codegen.log
+/mp/codegen.log

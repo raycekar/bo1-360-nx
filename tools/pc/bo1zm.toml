@@ -4,6 +4,9 @@
 # Local split-screen players in Zombies: 2-4 (2 keeps the Xbox 360 limit).
 # bo1zm_local_players = 4
 
+# Split screen keeps the Xbox 360's closer fog (true) or the full view distance (false; needs a faster GPU).
+# bo1zm_splitscreen_fog = true
+
 # Offline profiles, one per controller (default 4). Controller 1 is player 1, and so on; keyboard/mouse is player 1.
 # offline_user_count = 4
 # offline_user_name_1 = "Player 2"

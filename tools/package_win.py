@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 r"""Assemble the ready-to-run Windows folder (out/win) and its manifest for tools/pc/sync.cmd.
 
-    python3 -I tools/package_win.py --build <build dir with bo1zm.exe> --data <bo1recomp/data> --out <out/win>
+    python3 -I tools/package_win.py --build <build dir> [--build <build dir> ...] --data <bo1recomp/data> --out <out/win>
 
 Layout made (game data hard-linked from --data, so nothing is stored twice):
-    bo1zm.exe, *.dll, bo1zm.toml (only if missing)
+    bo1zm.exe / bo1mp.exe, *.dll (from the first --build), bo1zm.toml / bo1mp.toml (only if missing)
     game\      the disc's files + TU11's default.xexp / default_mp.xexp beside the executables
     update\    the rest of TU11 (patch fastfiles)
     user\0000000000000000\41560855\   the DLC packs (tools/install_dlc.py output in <data>/content)
@@ -21,7 +21,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKIP_MANIFEST = {'sync.cmd', 'manifest.json'}
-KEEP_LOCAL = {'bo1zm.toml'}  # user settings: copied once, never overwritten by a sync
+KEEP_LOCAL = {'bo1zm.toml', 'bo1mp.toml'}  # user settings: copied once, never overwritten by a sync
 
 
 def link(src, dst):
@@ -55,7 +55,7 @@ def sha256(path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--build', required=True)
+    ap.add_argument('--build', required=True, action='append')
     ap.add_argument('--data', required=True)
     ap.add_argument('--out', required=True)
     a = ap.parse_args()
@@ -63,12 +63,15 @@ def main():
     os.makedirs(out, exist_ok=True)
 
     # The port.
-    for f in os.listdir(a.build):
-        if f == 'bo1zm.exe' or f.lower().endswith('.dll'):
-            shutil.copy2(os.path.join(a.build, f), os.path.join(out, f))
-    toml = os.path.join(out, 'bo1zm.toml')
-    if not os.path.exists(toml):
-        shutil.copy2(os.path.join(HERE, 'pc', 'bo1zm.toml'), toml)
+    # The DLLs come from the first build: every build compiles the same SDK with the same flags.
+    for i, build in enumerate(a.build):
+        for f in os.listdir(build):
+            if f in ('bo1zm.exe', 'bo1mp.exe') or (i == 0 and f.lower().endswith('.dll')):
+                shutil.copy2(os.path.join(build, f), os.path.join(out, f))
+                if f.endswith('.exe'):
+                    toml = os.path.join(out, f[:-4] + '.toml')
+                    if not os.path.exists(toml):
+                        shutil.copy2(os.path.join(HERE, 'pc', f[:-4] + '.toml'), toml)
     for f in ('sync.ps1', 'sync.cmd'):
         shutil.copy2(os.path.join(HERE, 'pc', f), os.path.join(out, f))
 

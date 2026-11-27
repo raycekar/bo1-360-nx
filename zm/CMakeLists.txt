@@ -14,6 +14,7 @@ include(generated/rexglue.cmake)
 set(BO1ZM_SOURCES
     src/main.cpp
     src/bo1zm_local_players.cpp
+    src/bo1zm_script_patch.cpp
 )
 
 if(WIN32)

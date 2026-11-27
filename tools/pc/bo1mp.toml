@@ -1,0 +1,12 @@
+# bo1mp settings (next to bo1mp.exe): Black Ops Multiplayer. Folders default to game\, update\ and user\ beside the exe.
+# Uncomment a line to change it.
+
+# Offline profiles, one per controller (default 4). Controller 1 is player 1, and so on; keyboard/mouse is player 1.
+# offline_user_count = 4
+# offline_user_name_1 = "Player 2"
+
+# Controller backend: sdl (default) or xinput
+# input_backend = "sdl"
+
+# Log level: trace, debug, info, warning, error
+# log_level = "info"
