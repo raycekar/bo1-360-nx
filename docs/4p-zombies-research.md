@@ -132,3 +132,21 @@ gamer card UI, network QoS and voice, unused I/O manager calls, `ObIsTitleObject
   `sub_823792F8`): a set of `party_maxlocalplayers` to 2 becomes `bo1mp_systemlink_local_players` (default 4);
   1 and 4 pass. The dvar value is 16 bytes passed by value in r4:r5, the int in the high word of r4 (checked at the
   caller `sub_823E4400`).
+
+## Controllers, renderer, MP HUD (static, 2026-11-27)
+
+- **Pads -> players**: `SlotAssignment` (the SDK default, `input_system.cpp`) gives each physical pad the lowest free
+  slot 0-3 in connection order, and keeps it when another pad is unplugged; a reconnected pad takes the lowest free
+  slot. Keyboard/mouse is synthetic and always player 1 (with pad 1). `kMaxGuestUsers` = 4. The SDL log line
+  `SDL OnControllerDeviceAdded: connection order N` shows the order. Connect the pads in player order before start.
+- **Game input calls (ZM)**: `XamInputGetState` through `sub_824BEED8` (gamepad flag, explicit user from callers
+  `sub_8233B118`, `sub_823A7FA8`, `sub_823DA598`); `XamInputGetKeystrokeEx` through `sub_824BEFB0`, which turns user
+  0xFF into `XINPUT_FLAG_ANY_USER`. The SDK reads any-user keystrokes round-robin over all 4 ports and writes back the
+  pad that sent the key (`rex/input/user_queries.h`), so "press START to join" on pads 2-4 reaches the game. Only an
+  any-user `XamInputGetState` is pinned to pad 1; BO1 does not use that.
+- **Renderer at 4 views**: the GPU code is Xenia's (viewport, scissor, window offset, EDRAM resolve); no open TODO on
+  those paths. Each view is a separate pass with its own resolve, so the cost grows with views: a speed risk, not a
+  correctness risk. Check on the PC: frame time at 1, 2 and 4 views, and `bo1zm_splitscreen_fog`.
+- **MP HUD/menus**: MP split screen is native 4-player (`party_maxlocalplayers 4`, `default_splitscreen.cfg` HUD
+  scale). The port only lifts System Link from 2 (`bo1mp_systemlink_local_players`). Nothing else to change before a
+  PC run.
