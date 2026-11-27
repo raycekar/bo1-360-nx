@@ -2,6 +2,7 @@
 r"""Assemble the ready-to-run Windows folder (out/win) and its manifest for tools/pc/sync.cmd.
 
     python3 -I tools/package_win.py --build <build dir> [--build <build dir> ...] --data <bo1recomp/data> --out <out/win>
+    ... --queue 02-qos-fix --notes "what to test"   -> a test build in <out>/builds/02-qos-fix/ (see below)
 
 Layout made (game data hard-linked from --data, so nothing is stored twice):
     bo1zm.exe / bo1mp.exe, *.dll (from the first --build), bo1zm.toml / bo1mp.toml (only if missing)
@@ -9,6 +10,10 @@ Layout made (game data hard-linked from --data, so nothing is stored twice):
     update\    the rest of TU11 (patch fastfiles)
     user\0000000000000000\41560855\   the DLC packs (tools/install_dlc.py output in <data>/content)
     sync.ps1, sync.cmd (copied from tools/pc/), manifest.json
+--queue NAME puts only the port (exe, DLLs, toml, TEST.txt) in <out>/builds/NAME/ and leaves the top-level build as it
+is. The exe finds game\, update\ and user\ two levels up (common/bo1_paths.h), so a sync copies only the new ~60 MB
+folder, never the game data again. <out>/BUILDS.txt lists the queue. The .map/.pdb go to <out>/../maps/NAME/ for
+tools/crash_triage.py. To drop an old test build: delete its folder here and package again (the sync removes it).
 manifest.json lists every file but sync.cmd with its size and SHA-256 (cached in <out>/../.win_hashcache.json by
 size + mtime, so a rebuild only hashes what changed). The folder holds game data: it never leaves your machines.
 """
@@ -21,7 +26,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKIP_MANIFEST = {'sync.cmd', 'manifest.json'}
-KEEP_LOCAL = {'bo1zm.toml', 'bo1mp.toml'}  # user settings: copied once, never overwritten by a sync
+KEEP_LOCAL = {'bo1zm.toml', 'bo1mp.toml'}  # user settings (any folder): copied once, never overwritten by a sync
 
 
 def link(src, dst):
@@ -58,20 +63,45 @@ def main():
     ap.add_argument('--build', required=True, action='append')
     ap.add_argument('--data', required=True)
     ap.add_argument('--out', required=True)
+    ap.add_argument('--queue', help='name of a test build folder under <out>/builds (for example 02-qos-fix)')
+    ap.add_argument('--notes', default='', help='what changed and what to test (goes to TEST.txt and BUILDS.txt)')
     a = ap.parse_args()
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
+    port = os.path.join(out, 'builds', a.queue) if a.queue else out
+    os.makedirs(port, exist_ok=True)
 
     # The port.
     # The DLLs come from the first build: every build compiles the same SDK with the same flags.
     for i, build in enumerate(a.build):
         for f in os.listdir(build):
             if f in ('bo1zm.exe', 'bo1mp.exe') or (i == 0 and f.lower().endswith('.dll')):
-                shutil.copy2(os.path.join(build, f), os.path.join(out, f))
+                shutil.copy2(os.path.join(build, f), os.path.join(port, f))
                 if f.endswith('.exe'):
-                    toml = os.path.join(out, f[:-4] + '.toml')
+                    toml = os.path.join(port, f[:-4] + '.toml')
                     if not os.path.exists(toml):
                         shutil.copy2(os.path.join(HERE, 'pc', f[:-4] + '.toml'), toml)
+    if a.queue:
+        maps = os.path.join(os.path.dirname(out), 'maps', a.queue)
+        os.makedirs(maps, exist_ok=True)
+        for build in a.build:
+            for f in os.listdir(build):
+                if f.endswith(('.map', '.pdb')):
+                    shutil.copy2(os.path.join(build, f), os.path.join(maps, f))
+        with open(os.path.join(port, 'TEST.txt'), 'w', newline='\r\n') as f:
+            f.write(f'Test build {a.queue} ({time.strftime("%Y-%m-%d %H:%M")})\n\n{a.notes}\n\n'
+                    'Start bo1zm.exe (or bo1mp.exe) in this folder. It uses game, update and user from the top folder.\n'
+                    'The log is in this folder. Send the log if something goes wrong.\n')
+    builds_dir = os.path.join(out, 'builds')
+    if os.path.isdir(builds_dir):
+        lines = ['Test builds, oldest first. Each folder runs on its own; game data is shared from this folder.', '']
+        for name in sorted(os.listdir(builds_dir)):
+            t = os.path.join(builds_dir, name, 'TEST.txt')
+            if os.path.isfile(t):
+                note = open(t).read().split('\n\n', 2)
+                lines.append(f'builds\\{name}: ' + (note[1].strip().splitlines() or [''])[0])
+        with open(os.path.join(out, 'BUILDS.txt'), 'w', newline='\r\n') as f:
+            f.write('\n'.join(lines) + '\n')
     for f in ('sync.ps1', 'sync.cmd'):
         shutil.copy2(os.path.join(HERE, 'pc', f), os.path.join(out, f))
 
@@ -104,7 +134,7 @@ def main():
                 c = [key, sha256(p)]
                 cache[rel] = c
             e = {'path': rel, 'size': st.st_size, 'sha256': c[1]}
-            if rel in KEEP_LOCAL:
+            if os.path.basename(rel) in KEEP_LOCAL:
                 e['keep'] = True
             files.append(e)
     files.sort(key=lambda e: e['path'])

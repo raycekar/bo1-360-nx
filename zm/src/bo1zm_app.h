@@ -15,6 +15,7 @@
 #include <rex/rex_app.h>
 
 #include "bo1_online.h"
+#include "bo1_paths.h"
 
 class Bo1zmApp : public rex::ReXApp {
  public:
@@ -40,7 +41,8 @@ class Bo1zmApp : public rex::ReXApp {
 
   void OnConfigurePaths(rex::PathConfig& paths) override {
     namespace fs = std::filesystem;
-    const fs::path exe = rex::filesystem::GetExecutableFolder();
+    // exe: the shared data folder (the exe's own folder, or two up for a queued build in builds\<name>\).
+    const fs::path exe = bo1::DataBase(rex::filesystem::GetExecutableFolder());
     if (paths.game_data_root.empty()) paths.game_data_root = exe / "game";
     if (paths.update_data_root.empty() && fs::is_directory(exe / "update"))
       paths.update_data_root = exe / "update";

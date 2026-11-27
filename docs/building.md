@@ -25,6 +25,10 @@ Everything runs on a Linux x86-64 machine; the result runs on Windows x64. Paths
 5. Windows build: `JOBS=2 zm/build_windows.sh` -> `out/build-win-zm/bo1zm.exe`, `rexruntime.dll`, `rexgpu-xenos.dll`.
 6. PC folder: `tools/package_win.py --build out/build-win-zm --data data --out out/win` (game data hard-linked,
    `manifest.json` with SHA-256 of each file).
+7. Test queue: add `--build out/build-win-mp --queue NN-name --notes "what to test"`. Only the port (~80 MB: exes,
+   DLLs, toml, TEST.txt) goes to `out/win/builds/NN-name/`; the exe uses `game\`, `update\`, `user\` two levels up
+   (`common/bo1_paths.h`). The top-level build stays as it is. `.map`/`.pdb` go to `out/maps/NN-name/`. To drop a
+   tested build, move its folder out and package again: the sync removes it on the PC.
 
 ## On the PC
 Copy `out/win/sync.cmd` to any folder, set `SOURCE` in it to the network path of `out/win`, run it. The first run

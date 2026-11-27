@@ -56,4 +56,4 @@ foreach ($p in @($old.Keys)) {
 if (-not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
 Copy-Item -LiteralPath $srcManifest -Destination $stateFile -Force
 Write-Host ("Done: {0} copied ({1:N2} GB), {2} removed, {3} up to date." -f $copied, ($bytes / 1GB), $removed, ($new.files.Count - $copied))
-Write-Host "Start Zombies with bo1zm.exe (Multiplayer: bo1mp.exe) in $Dest"
+Write-Host "Start Zombies with bo1zm.exe (Multiplayer: bo1mp.exe) in $Dest. Queued test builds: builds\<name>\ (see BUILDS.txt)."
