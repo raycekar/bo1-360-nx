@@ -32,11 +32,12 @@ set(CMAKE_RANLIB "${BO1_LLVM}/bin/llvm-ranlib")
 set(CMAKE_LINKER "${BO1_LLVM}/bin/lld-link")
 set(CMAKE_MT "${BO1_LLVM}/bin/llvm-mt")
 
-# System headers from the splat (as -isystem so warnings in them stay quiet).
+# System headers from the splat, searched AFTER clang's own builtin headers (stddef.h, *intrin.h), as clang-cl
+# orders /imsvc paths: -internal-isystem via -Xclang (plain -isystem would come first and shadow them).
 set(_inc "")
 foreach(d crt/include sdk/include/ucrt sdk/include/um sdk/include/shared sdk/include/winrt sdk/include/cppwinrt)
   if(EXISTS "${BO1_XWIN}/${d}")
-    string(APPEND _inc " -isystem \"${BO1_XWIN}/${d}\"")
+    string(APPEND _inc " -Xclang -internal-isystem -Xclang \"${BO1_XWIN}/${d}\"")
   endif()
 endforeach()
 set(CMAKE_C_FLAGS_INIT "-fuse-ld=lld -march=x86-64-v2 ${_inc}")

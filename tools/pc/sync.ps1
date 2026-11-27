@@ -27,6 +27,7 @@ foreach ($e in $new.files) {
   $rel = $e.path -replace '/', '\'
   $dst = Join-Path $Dest $rel
   $prev = $old[$e.path]
+  if ($e.keep -and (Test-Path -LiteralPath $dst)) { $old[$e.path] = $e; continue }  # your settings stay
   if ($prev -and $prev.sha256 -eq $e.sha256 -and (Test-Path -LiteralPath $dst) -and
       ((Get-Item -LiteralPath $dst).Length -eq $e.size)) { continue }
   $src = Join-Path $Source $rel

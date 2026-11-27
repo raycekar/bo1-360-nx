@@ -13,6 +13,7 @@ include(generated/rexglue.cmake)
 # Sources
 set(BO1ZM_SOURCES
     src/main.cpp
+    src/bo1zm_local_players.cpp
 )
 
 if(WIN32)
@@ -21,4 +22,13 @@ else()
     add_executable(bo1zm ${BO1ZM_SOURCES})
 endif()
 
-rexglue_setup_target(bo1zm)
+rexglue_setup_target(bo1zm GPU_PLUGINS xenos)
+
+# rex_app.cpp (compiled into this target) includes imgui.h, but rexruntime links imgui privately, so the include
+# path does not reach us when the SDK is a subdirectory (as in bo2-360-nx).
+if(TARGET imgui)
+    target_include_directories(bo1zm PRIVATE $<TARGET_PROPERTY:imgui,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
+if(WIN32)
+    target_link_options(bo1zm PRIVATE "LINKER:/errorlimit:0")  # every missing symbol in one link
+endif()

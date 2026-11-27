@@ -9,8 +9,13 @@ Focus: Zombies with **four-player local split screen**, and Multiplayer. Campaig
 
 ## Status
 
-Early research. The executables load, decrypt and take the title update; the four-player Zombies study is in
-progress (`docs/`).
+- **Research**: four-player Zombies is feasible; the limit is the menus' `party_maxlocalplayers 2`
+  ([docs/4p-zombies-research.md](docs/4p-zombies-research.md)).
+- **Zombies program** (`zm/`, TU11 `default.xex`): recompiled (18,436 functions) and cross-built for Windows with
+  the exact Xenos GPU renderer. The 4-player change is in (`zm/src/bo1zm_local_players.cpp`). **Not yet run.**
+- Multiplayer (`default_mp.xex`): not started.
+
+Building: [docs/building.md](docs/building.md).
 
 ## Based on
 

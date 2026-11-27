@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the ready-to-run Windows folder (out/win) and its manifest for tools/pc/sync.cmd.
+r"""Assemble the ready-to-run Windows folder (out/win) and its manifest for tools/pc/sync.cmd.
 
     python3 -I tools/package_win.py --build <build dir with bo1zm.exe> --data <bo1recomp/data> --out <out/win>
 
@@ -21,6 +21,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKIP_MANIFEST = {'sync.cmd', 'manifest.json'}
+KEEP_LOCAL = {'bo1zm.toml'}  # user settings: copied once, never overwritten by a sync
 
 
 def link(src, dst):
@@ -99,7 +100,10 @@ def main():
             if not c or c[0] != key:
                 c = [key, sha256(p)]
                 cache[rel] = c
-            files.append({'path': rel, 'size': st.st_size, 'sha256': c[1]})
+            e = {'path': rel, 'size': st.st_size, 'sha256': c[1]}
+            if rel in KEEP_LOCAL:
+                e['keep'] = True
+            files.append(e)
     files.sort(key=lambda e: e['path'])
     json.dump(cache, open(cache_path, 'w'))
     manifest = {'version': 1, 'built': time.strftime('%Y-%m-%d %H:%M:%S'), 'files': files}
