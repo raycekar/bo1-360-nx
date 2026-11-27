@@ -32,6 +32,9 @@
 #include <rex/audio/sdl/sdl_audio_system.h>
 #endif
 #include <rex/input/input_system.h>
+#include <rex/input/script/script_input_driver.h>
+#include <rex/ui/presenter.h>
+#include <fstream>
 #include <rex/kernel/init.h>
 #include <rex/kernel/xam/text_input.h>
 #include <rex/string/numeric.h>
@@ -67,6 +70,85 @@ REXCVAR_DEFINE_STRING(gpu_plugin, "", "GPU",
                       "GPU emulation plugin to load at startup (e.g. 'xenos'); empty disables "
                       "GPU emulation")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
+namespace {
+
+// Minimal PNG writer (stored deflate blocks, no compression) for the test "shot" command.
+uint32_t PngCrc(const uint8_t* p, size_t n, uint32_t c = 0xFFFFFFFFu) {
+  static uint32_t table[256];
+  static bool init = false;
+  if (!init) {
+    for (uint32_t i = 0; i < 256; i++) {
+      uint32_t v = i;
+      for (int k = 0; k < 8; k++) v = (v & 1) ? 0xEDB88320u ^ (v >> 1) : v >> 1;
+      table[i] = v;
+    }
+    init = true;
+  }
+  for (size_t i = 0; i < n; i++) c = table[(c ^ p[i]) & 0xFF] ^ (c >> 8);
+  return c;
+}
+
+[[maybe_unused]] bool WritePngRgbx(const std::string& path, const rex::ui::RawImage& img) {
+  const uint32_t w = img.width, h = img.height;
+  if (!w || !h) return false;
+  std::vector<uint8_t> raw;  // filter byte + RGB per row
+  raw.reserve(size_t(h) * (1 + size_t(w) * 3));
+  for (uint32_t y = 0; y < h; y++) {
+    raw.push_back(0);
+    const uint8_t* row = img.data.data() + size_t(y) * img.stride;
+    for (uint32_t x = 0; x < w; x++) {
+      raw.push_back(row[x * 4 + 0]);
+      raw.push_back(row[x * 4 + 1]);
+      raw.push_back(row[x * 4 + 2]);
+    }
+  }
+  std::vector<uint8_t> z = {0x78, 0x01};
+  uint32_t a = 1, b = 0;
+  for (uint8_t v : raw) {
+    a = (a + v) % 65521;
+    b = (b + a) % 65521;
+  }
+  for (size_t off = 0; off < raw.size() || off == 0;) {
+    size_t n = std::min<size_t>(65535, raw.size() - off);
+    bool last = off + n >= raw.size();
+    z.push_back(last ? 1 : 0);
+    z.push_back(uint8_t(n));
+    z.push_back(uint8_t(n >> 8));
+    z.push_back(uint8_t(~n));
+    z.push_back(uint8_t(~n >> 8));
+    z.insert(z.end(), raw.begin() + off, raw.begin() + off + n);
+    off += n;
+    if (last) break;
+  }
+  const uint32_t adler = (b << 16) | a;
+  for (int s = 24; s >= 0; s -= 8) z.push_back(uint8_t(adler >> s));
+
+  std::ofstream f(path, std::ios::binary);
+  if (!f) return false;
+  auto be32 = [&](uint32_t v) {
+    uint8_t q[4] = {uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v)};
+    f.write(reinterpret_cast<const char*>(q), 4);
+  };
+  auto chunk = [&](const char* type, const std::vector<uint8_t>& data) {
+    be32(uint32_t(data.size()));
+    std::vector<uint8_t> td(type, type + 4);
+    td.insert(td.end(), data.begin(), data.end());
+    f.write(reinterpret_cast<const char*>(td.data()), std::streamsize(td.size()));
+    be32(PngCrc(td.data(), td.size()) ^ 0xFFFFFFFFu);
+  };
+  static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+  f.write(reinterpret_cast<const char*>(sig), 8);
+  std::vector<uint8_t> ihdr = {uint8_t(w >> 24), uint8_t(w >> 16), uint8_t(w >> 8), uint8_t(w),
+                               uint8_t(h >> 24), uint8_t(h >> 16), uint8_t(h >> 8), uint8_t(h),
+                               8, 2, 0, 0, 0};
+  chunk("IHDR", ihdr);
+  chunk("IDAT", z);
+  chunk("IEND", {});
+  return bool(f);
+}
+
+}  // namespace
 
 namespace rex {
 
@@ -402,6 +484,22 @@ bool ReXApp::SetupPresentation() {
       }
     }
     window_->SetPresenter(presenter);
+#if REX_PLATFORM_WIN32
+    // Test pipe command "shot <file.png>": saves the last frame the game produced (works with the
+    // desktop locked or the window covered).
+    rex::input::script::RegisterCommand("shot", [presenter](const std::string& args) -> std::string {
+      if (args.empty()) {
+        return "error usage: shot <file.png>";
+      }
+      rex::ui::RawImage image;
+      if (!presenter->CaptureGuestOutput(image)) {
+        return "error no frame yet";
+      }
+      return WritePngRgbx(args, image) ? "ok " + std::to_string(image.width) + "x" +
+                                             std::to_string(image.height)
+                                       : "error cannot write " + args;
+    });
+#endif
   } else if (!graphics_system) {
     // Detached mode: the app brings its own renderer and drives its own paint
     // loop. ReXApp owns the returned drawer via immediate_drawer_.

@@ -25,6 +25,7 @@
 #else
 #include <rex/input/sdl/sdl_input_driver.h>
 #endif
+#include <rex/input/script/script_input_driver.h>
 #include <rex/input/state_merge.h>
 #include <rex/input/xinput/xinput_input_driver.h>
 #include <rex/logging.h>
@@ -36,6 +37,12 @@ REXCVAR_DEFINE_STRING(input_backend, "switch", "Input", "Input backend: switch")
 REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput")
     .allowed({"sdl", "xinput"});
 #endif
+
+REXCVAR_DEFINE_INT32(input_script_pads, 0, "Input",
+                     "Virtual test controllers (0-4) driven over a named pipe; they take players 1..N")
+    .range(0, 4);
+REXCVAR_DEFINE_STRING(input_script_pipe, "bo1ctl", "Input",
+                      "Name of the test control pipe (\\\\.\\pipe\\<name>)");
 
 REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
 REXCVAR_DEFINE_BOOL(input_vibration, false, "Input",
@@ -407,6 +414,14 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
 
   if (!tool_mode) {
 #if REX_PLATFORM_WIN32
+    // Added first so the virtual pads are players 1..N ahead of any real pad.
+    if (REXCVAR_GET(input_script_pads) > 0) {
+      auto script_driver = std::make_unique<script::ScriptInputDriver>(
+          nullptr, 0, uint32_t(REXCVAR_GET(input_script_pads)), REXCVAR_GET(input_script_pipe));
+      if (script_driver->Setup() == X_STATUS_SUCCESS) {
+        input->AddDriver(std::move(script_driver));
+      }
+    }
     if (REXCVAR_GET(input_backend) == "xinput") {
       auto xinput_driver = std::make_unique<xinput::XinputInputDriver>(nullptr, 0);
       if (xinput_driver->Setup() == X_STATUS_SUCCESS) {
