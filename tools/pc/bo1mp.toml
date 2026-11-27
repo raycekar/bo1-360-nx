@@ -8,5 +8,8 @@
 # Controller backend: sdl (default) or xinput
 # input_backend = "sdl"
 
+# GPU plugin (default "xenos" = rexgpu-xenos.dll beside the exe)
+# gpu_plugin = "xenos"
+
 # Log level: trace, debug, info, warning, error
 # log_level = "info"

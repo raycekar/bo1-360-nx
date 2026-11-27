@@ -28,7 +28,11 @@ class Bo1zmApp : public rex::ReXApp {
   // Split screen: one offline profile per controller port (the SDK default is 1, so players 2-4 could not sign
   // in). bo1zm.toml's offline_user_count still wins when it is set there. As in bo2-360-nx.
   void OnPreSetup(rex::RuntimeConfig& config) override {
-    (void)config;
+    // GPU: the SDK's default is no GPU at all (gpu_plugin ""), and then the game waits forever on a black screen
+    // (first PC run, 2026-11-27). Load rexgpu-xenos.dll unless bo1zm.toml names a plugin itself.
+    if (config.gpu_plugin.empty() && rex::cvar::GetFlagSource("gpu_plugin") == rex::cvar::Source::kDefault) {
+      config.gpu_plugin = "xenos";
+    }
     if (rex::cvar::GetFlagSource("offline_user_count") == rex::cvar::Source::kDefault) {
       rex::cvar::SetFlagByName("offline_user_count", "4");
     }

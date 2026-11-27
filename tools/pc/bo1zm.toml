@@ -18,5 +18,8 @@
 # update_data_root = "D:/bo1/update"
 # user_data_root = "D:/bo1/user"
 
+# GPU plugin (default "xenos" = rexgpu-xenos.dll beside the exe)
+# gpu_plugin = "xenos"
+
 # Log level: trace, debug, info, warning, error
 # log_level = "info"
