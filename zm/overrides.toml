@@ -1,0 +1,23 @@
+# ============================================================================
+#  BO1 Zombies (TU11 default.xex 0.0.11.3) - manual declarations for the codegen
+#  Included from bo1zm_manifest.toml, flat schema (sections at the root).
+#  Valid address range: 0x82000000 - 0x84150000 (base + 34,930,688 bytes).
+# ============================================================================
+
+# --- setjmp / longjmp (root keys: must stay ABOVE any table) -----------------
+# setjmp 0x825ED9E0: checks a hook at 0x84051FD4, then mflr/mfcr and saves f14-f31 (0x00..0x88), r13-r31
+# (0x98..0x128) and v64.. from 0x140 into the buffer at r3. longjmp 0x825EDDE0: val 0 -> 1, reloads the same
+# layout through r7 (lfd f14, 0(r7) at 0x825EDE1C). Same shape as BO2's 0x82918CA0 / 0x82919E50.
+setjmp_address = 0x825ED9E0
+longjmp_address = 0x825EDDE0
+
+# Register-as-local speed options are OFF for the bring-up (every register stays in ctx), so no
+# read_before_write / setjmp_locals fix-ups are needed yet. skip_msr only drops the mfmsr/mtmsrd interrupt
+# guards' global lock, as in bo2-360-nx.
+skip_msr = true
+
+[functions]
+
+# --- Tail-branch targets, round 1 (tools/codegen_fix_unresolved.py) ---
+"0x821F1F10" = { }   # lis r11, -0x7d45; addi r11, r11, -0x549c; lwz r10, 0(r11); addi r10, r10, 1; cmpwi cr6, r10, 1; bge cr6, 0x821f1f2c   <- 0x821F20A8
+"0x82381E28" = { }   # stw r4, 0x20(r3); blr   <- 0x8242B2D0

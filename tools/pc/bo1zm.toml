@@ -1,0 +1,9 @@
+# bo1zm settings (next to bo1zm.exe). Folders default to game\, update\ and user\ beside the exe.
+# Uncomment a line to change it.
+
+# game_data_root = "D:/bo1/game"
+# update_data_root = "D:/bo1/update"
+# user_data_root = "D:/bo1/user"
+
+# Log level: trace, debug, info, warning, error
+# log_level = "info"
