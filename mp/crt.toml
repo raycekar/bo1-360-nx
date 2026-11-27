@@ -1,0 +1,11 @@
+# Native CRT (SDK sdk/src/kernel/crt): these guest functions run as host memcpy/memmove/memset instead of recompiled PPC.
+# OFF until the first PC runs work. To turn on, add "crt.toml" to includes in the manifest, then codegen.sh and a full
+# build_windows.sh. Found 2026-11-27 by code shape (ZM) and a masked 96-byte match (MP, one hit each); all are function
+# starts in the codegen. About 2,800 direct call sites in ZM. String functions are left out on purpose: few calls,
+# and the engine's own I_strncpyz-style helpers (0x823855A8, 0x82385600 in ZM) do not have CRT behavior.
+[rexcrt]
+memcpy  = 0x826B2E30   # std r3,-8(r1); dcbt; ... (memmove's forward path branches here)
+memmove = 0x826B2940   # cmpw r3,r4; beqlr; dst<src -> memcpy, else backward copy
+memset  = 0x826B4980   # byte fill to alignment, then rlwimi r4 replicate + word/line fill
+XMemCpy = 0x8256D358   # VMX copy, dcbt prefetch in 0x400 blocks, returns r3
+XMemSet = 0x8256D008   # extsb r4 byte fill < 16 bytes, VMX fill above, returns r3

@@ -61,3 +61,25 @@ work, so the plan uses the port's own UI:
   ConsoleId). The sync never copies it (it is not in the manifest), so each PC gets its own. Copying a whole game
   folder from one PC to another would copy it too: delete it on the second PC.
 - Test order: first two PCs on one LAN (System Link only), then over the internet with the join code.
+
+## Network imports and stubs (static, 2026-11-27)
+
+ZM imports 20 `NetDll_*` functions. All are real in the SDK except three stubs. A stub leaves r3 as it is, and the
+game's wrappers (`0x8252CB88`..`0x8252CCD0`) pass `caller = 1` in r3, so a stub "returns" 1 (`ERROR_INVALID_FUNCTION`).
+
+| Import | Caller | What the game does with a stub | Fix |
+|---|---|---|---|
+| `XNetServerToInAddr` | `0x821F1880` | checks `== 0`, takes the failure path | none needed |
+| `XNetQosGetListenStats` | `0x82461944` (before `XNetQosListen`) | ignores the result; the stats stay unset | zero the counters, return 0 |
+| `XNetQosLookup` | `0x8247385C` (party probe; checks the result) and `0x82314F44` (ZM `xstart`) | `xstart` ignores the result, reads `*ppxnqos` (stack garbage) and polls `count_pending` | allocate an `XNQOS`: every target COMPLETE, not contacted; set the event; return 0 |
+
+`XNetQosLookup` has 13 arguments; the last 5 are on the guest stack at `r1 + 0x54 + 8*(i-8)` (checked in the wrapper
+`0x8252CC30`, which copies them from its caller's frame).
+
+## Zombies <-> Multiplayer switch
+
+On the 360 the menus relaunch the other executable: ZM calls `XamLoaderLaunchTitle("default_mp.xex")` at
+`0x823D6754` (menu path) and in `xstart` (`0x82314FF8`, after the QoS lookup above); MP launches `default.xex`
+(`0x82242DDC`, `0x82574110`). The SDK only stored the path and ended the title, so the game stopped with an open
+window. Fix: SDK cvar `launch_title_map` (`default_mp.xex=bo1mp.exe;default.xex=bo1zm.exe`, set by both apps) starts the
+other PC exe from the same folder and ends this process. Launch data (party state) is not carried over.

@@ -1217,8 +1217,57 @@ REX_EXPORT(__imp__NetDll_XNetGetConnectStatus, rex::kernel::xam::NetDll_XNetGetC
 REX_EXPORT_STUB(__imp__NetDll_XNetGetSystemLinkPort);
 REX_EXPORT_STUB(__imp__NetDll_XNetGetXnAddrPlatform);
 REX_EXPORT_STUB(__imp__NetDll_XNetInAddrToServer);
-REX_EXPORT_STUB(__imp__NetDll_XNetQosGetListenStats);
-REX_EXPORT_STUB(__imp__NetDll_XNetQosLookup);
+// XNetQosGetListenStats(caller, pxnkid, pstats): no QoS listener runs, so every counter after dwSizeOfStruct is 0.
+REX_HOOK_RAW(__imp__NetDll_XNetQosGetListenStats) {
+  auto* memory = REX_KERNEL_MEMORY();
+  if (const uint32_t stats = ctx.r5.u32) {
+    auto* words = memory->TranslateVirtual<rex::be<uint32_t>*>(stats);
+    const uint32_t size = std::min<uint32_t>(words[0], 7 * 4);  // XNQOSLISTENSTATS is 7 DWORDs
+    for (uint32_t i = 1; i < size / 4; ++i) words[i] = 0;
+  }
+  (void)base;
+  ctx.r3.u64 = 0;
+}
+static rex::ppc::detail::PPCFuncRegistrar _ppc_reg___imp__NetDll_XNetQosGetListenStats(
+    "__imp__NetDll_XNetQosGetListenStats", &__imp__NetDll_XNetQosGetListenStats);
+
+// XNetQosLookup(caller, cxna, apxna, apxnkid, apxnkey, cina, aina, adwServiceId, cProbes, dwBitsPerSec, dwFlags,
+// hEvent, ppxnqos) has 13 arguments: the last 5 are on the guest stack at r1 + 0x54 + 8 * (i - 8). There is no
+// QoS service, so every target is reported at once as probed and not reached (XNET_XNQOSINFO_COMPLETE only).
+// A plain stub returned r3 (= caller, 1) and left *ppxnqos unset; BO1 ZM `xstart` (0x82314F44) ignores the result,
+// polls count_pending and reads info[0] through that pointer, so it read stack garbage.
+REX_HOOK_RAW(__imp__NetDll_XNetQosLookup) {
+  using rex::kernel::xam::XNQOS;
+  using rex::kernel::xam::XNQOSINFO;
+  auto* memory = REX_KERNEL_MEMORY();
+  auto stack_arg = [&](uint32_t index) -> uint32_t {
+    return *memory->TranslateVirtual<rex::be<uint32_t>*>(ctx.r1.u32 + 0x54 + (index - 8) * 8);
+  };
+  const uint32_t targets = ctx.r4.u32 + ctx.r8.u32;  // cxna + cina
+  const uint32_t event_handle = stack_arg(11);
+  const uint32_t ppxnqos = stack_arg(12);
+  REXKRNL_DEBUG("XNetQosLookup({} targets, event {:08X}): no QoS service, none contacted", targets, event_handle);
+  if (ppxnqos) {
+    const uint32_t slots = std::max<uint32_t>(targets, 1);
+    const uint32_t size = uint32_t(offsetof(XNQOS, info) + sizeof(XNQOSINFO) * slots);
+    const uint32_t qos_guest = memory->SystemHeapAlloc(size);
+    auto* bytes = memory->TranslateVirtual<uint8_t*>(qos_guest);
+    std::memset(bytes, 0, size);
+    auto* qos = reinterpret_cast<XNQOS*>(bytes);
+    qos->count = targets;
+    qos->count_pending = 0;
+    auto* info = reinterpret_cast<XNQOSINFO*>(bytes + offsetof(XNQOS, info));
+    for (uint32_t i = 0; i < targets; ++i) info[i].flags = 0x01;
+    *memory->TranslateVirtual<rex::be<uint32_t>*>(ppxnqos) = qos_guest;
+  }
+  if (event_handle) {
+    if (auto ev = REX_KERNEL_OBJECTS()->LookupObject<rex::system::XEvent>(event_handle)) ev->Set(0, false);
+  }
+  (void)base;
+  ctx.r3.u64 = 0;
+}
+static rex::ppc::detail::PPCFuncRegistrar _ppc_reg___imp__NetDll_XNetQosLookup("__imp__NetDll_XNetQosLookup",
+                                                                              &__imp__NetDll_XNetQosLookup);
 REX_EXPORT(__imp__NetDll_XNetRegisterKey, rex::kernel::xam::NetDll_XNetRegisterKey_entry)
 REX_EXPORT_STUB(__imp__NetDll_XNetReplaceKey);
 REX_EXPORT_STUB(__imp__NetDll_XNetServerToInAddr);

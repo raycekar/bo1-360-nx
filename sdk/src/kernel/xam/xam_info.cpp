@@ -9,6 +9,12 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <cctype>
+#include <cstdlib>
+#include <filesystem>
+
+#include <rex/cvar.h>
+#include <rex/filesystem.h>
 #include <rex/kernel/xam/module.h>
 #include <rex/kernel/xam/private.h>
 #include <rex/logging.h>
@@ -27,6 +33,11 @@
 
 #include <fmt/format.h>
 #include <fmt/xchar.h>
+
+REXCVAR_DEFINE_STRING(launch_title_map, "", "Kernel",
+                      "Guest exe -> host exe for XamLoaderLaunchTitle, such as "
+                      "\"default_mp.xex=bo1mp.exe;default.xex=bo1zm.exe\". A match starts the host exe "
+                      "(next to this one) and closes this one");
 
 namespace rex {
 namespace kernel {
@@ -260,6 +271,52 @@ u32 XamLoaderGetLaunchData_entry(mapped_void buffer_ptr, u32 buffer_size) {
   return X_ERROR_SUCCESS;
 }
 
+// A title that relaunches into another of its own executables (BO1 ZM <-> MP) has a separate PC exe for each one:
+// start it (launch_title_map) and end this process, as a window close does.
+static void LaunchHostTitle(const std::string& guest_path) {
+  const std::string map = REXCVAR_GET(launch_title_map);
+  if (map.empty()) return;
+  std::string name = guest_path.substr(guest_path.find_last_of("\\:/") + 1);
+  for (auto& c : name) c = char(std::tolower(static_cast<unsigned char>(c)));
+  size_t pos = 0;
+  while (pos <= map.size()) {
+    const size_t end = std::min(map.find(';', pos), map.size());
+    const std::string item = map.substr(pos, end - pos);
+    pos = end + 1;
+    const size_t eq = item.find('=');
+    if (eq == std::string::npos) continue;
+    std::string guest = item.substr(0, eq);
+    for (auto& c : guest) c = char(std::tolower(static_cast<unsigned char>(c)));
+    if (guest != name) continue;
+    const auto folder = rex::filesystem::GetExecutableFolder();
+    const auto exe = folder / item.substr(eq + 1);
+    if (!std::filesystem::exists(exe)) {
+      REXKRNL_ERROR("XamLoaderLaunchTitle: {} -> {} not found", name, rex::path_to_utf8(exe));
+      return;
+    }
+#if REX_PLATFORM_WIN32
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    std::wstring command = L"\"" + exe.wstring() + L"\"";
+    if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, folder.c_str(), &si,
+                        &pi)) {
+      REXKRNL_ERROR("XamLoaderLaunchTitle: starting {} failed ({})", rex::path_to_utf8(exe), GetLastError());
+      return;
+    }
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    REXKRNL_INFO("XamLoaderLaunchTitle: {} -> started {}; closing this process", name, rex::path_to_utf8(exe));
+    rex::FlushLogging();
+    std::_Exit(0);
+#else
+    REXKRNL_WARN("XamLoaderLaunchTitle: {} -> {} (starting a process is Windows-only)", name,
+                 rex::path_to_utf8(exe));
+    return;
+#endif
+  }
+}
+
 void XamLoaderLaunchTitle_entry(mapped_string raw_name_ptr, u32 flags) {
   auto xam = REX_KERNEL_STATE()->GetKernelModule<XamModule>("xam.xex");
 
@@ -268,7 +325,7 @@ void XamLoaderLaunchTitle_entry(mapped_string raw_name_ptr, u32 flags) {
 
   // Translate the launch path to a full path.
   if (raw_name_ptr) {
-    auto path = raw_name_ptr.value();
+    std::string path(raw_name_ptr.value());  // a copy: path is reassigned below (was a dangling string_view)
     if (path.empty()) {
       loader_data.launch_path = "game:\\default.xex";
     } else {
@@ -283,6 +340,7 @@ void XamLoaderLaunchTitle_entry(mapped_string raw_name_ptr, u32 flags) {
   } else {
     assert_always("Game requested exit to dashboard via XamLoaderLaunchTitle");
   }
+  LaunchHostTitle(loader_data.launch_path);
 
   // This function does not return.
   REX_KERNEL_STATE()->TerminateTitle();

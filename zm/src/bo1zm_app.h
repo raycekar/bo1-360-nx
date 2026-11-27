@@ -31,6 +31,11 @@ class Bo1zmApp : public rex::ReXApp {
     if (rex::cvar::GetFlagSource("offline_user_count") == rex::cvar::Source::kDefault) {
       rex::cvar::SetFlagByName("offline_user_count", "4");
     }
+    // Zombies <-> Multiplayer from the game's menus: the 360 relaunches default.xex / default_mp.xex; on PC each is
+    // its own exe next to this one (SDK XamLoaderLaunchTitle). bo1zm.toml's launch_title_map still wins.
+    if (rex::cvar::GetFlagSource("launch_title_map") == rex::cvar::Source::kDefault) {
+      rex::cvar::SetFlagByName("launch_title_map", "default_mp.xex=bo1mp.exe;default.xex=bo1zm.exe");
+    }
   }
 
   void OnConfigurePaths(rex::PathConfig& paths) override {
