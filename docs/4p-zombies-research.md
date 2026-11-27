@@ -84,3 +84,17 @@ python -I tools/inspect/t5_zone_key.py work/dump_tu11/default.image.bin <any.ff>
 python -I tools/inspect/ff_decode_t5.py frontend.ff --key-file key.txt --out work/ff --list 0 --no-cache
 python -I tools/inspect/zone_scripts.py work/scripts work/ff/<zones...>
 ```
+
+## Kernel and XAM imports (Zombies, TU11)
+
+`tools/inspect/import_audit.py work/dump_tu11/default.summary.json`: 278 imports (99 xam, 179 xboxkrnl), **none
+missing**. 237 are implemented and 12 are kernel variables the SDK provides. The 29 stubs are friends / marketplace /
+gamer card UI, network QoS and voice, unused I/O manager calls, `ObIsTitleObject` / `ObReferenceObject`,
+`RtlUpcaseUnicodeChar`, the HMAC-SHA trio and `XeKeysAesCbc`.
+
+- **XeCryptHmacShaInit/Update/Final** are now real (SDK `xboxkrnl_crypt.cpp`, checked against RFC 2202). BO1 calls
+  them from `sub_82551D68`, reached from a "challenge" routine (`sub_8245A378`), probably online challenge/response.
+- **XeKeysAesCbc** stays a no-op: it encrypts with the console's own key, which no PC has. Encrypt and decrypt are
+  then both identity, so the result is consistent on one machine.
+- Split screen: the SDK made 1 offline profile by default. The app now sets `offline_user_count = 4`, as bo2-360-nx
+  does. Input maps physical pad N to guest user N (SlotAssignment); keyboard and mouse join user 0.

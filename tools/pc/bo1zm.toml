@@ -1,6 +1,16 @@
 # bo1zm settings (next to bo1zm.exe). Folders default to game\, update\ and user\ beside the exe.
 # Uncomment a line to change it.
 
+# Local split-screen players in Zombies: 2-4 (2 keeps the Xbox 360 limit).
+# bo1zm_local_players = 4
+
+# Offline profiles, one per controller (default 4). Controller 1 is player 1, and so on; keyboard/mouse is player 1.
+# offline_user_count = 4
+# offline_user_name_1 = "Player 2"
+
+# Controller backend: sdl (default) or xinput
+# input_backend = "sdl"
+
 # game_data_root = "D:/bo1/game"
 # update_data_root = "D:/bo1/update"
 # user_data_root = "D:/bo1/user"

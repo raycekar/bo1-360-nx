@@ -503,6 +503,58 @@ void XeCryptAesCbc_entry(ppc_ptr_t<XECRYPT_AES_STATE> state_ptr, mapped_void inp
   }
 }
 
+// Streaming HMAC-SHA1 (XECRYPT_HMACSHA_STATE: inner and outer SHA states). Added for bo1-360-nx: BO1 TU11 calls
+// XeCryptHmacShaInit/Update/Final (sub_82551D68); the SDK only had stubs, which left the digest unwritten.
+typedef struct {
+  XECRYPT_SHA_STATE sha_state[2];  // 0x00 inner (key ^ 0x36), 0x58 outer (key ^ 0x5C)
+} XECRYPT_HMACSHA_STATE;
+static_assert_size(XECRYPT_HMACSHA_STATE, 0xB0);
+
+static void HmacShaPadState(XECRYPT_SHA_STATE* state, const uint8_t* key, uint32_t key_size, uint8_t pad) {
+  uint8_t block[0x40];
+  std::memset(block, pad, sizeof(block));
+  for (uint32_t i = 0; i < key_size; i++) block[i] = key[i] ^ pad;
+  sha1::SHA1 sha;
+  sha.processBytes(block, sizeof(block));
+  StoreSha1(&sha, state);
+}
+
+void XeCryptHmacShaInit_entry(ppc_ptr_t<XECRYPT_HMACSHA_STATE> state, mapped_void key, u32 key_size_in) {
+  uint8_t tmp_key[0x40] = {};
+  uint32_t key_size = key_size_in;
+  if (key_size > 0x40) {
+    sha1::SHA1 sha_key;
+    sha_key.processBytes(key, key_size);
+    sha_key.finalize(tmp_key);
+    key_size = 0x14u;
+  } else if (key_size) {
+    std::memcpy(tmp_key, key, key_size);
+  }
+  state.Zero();
+  HmacShaPadState(&state->sha_state[0], tmp_key, key_size, 0x36);
+  HmacShaPadState(&state->sha_state[1], tmp_key, key_size, 0x5C);
+}
+
+void XeCryptHmacShaUpdate_entry(ppc_ptr_t<XECRYPT_HMACSHA_STATE> state, mapped_void input, u32 input_size) {
+  sha1::SHA1 sha;
+  InitSha1(&sha, &state->sha_state[0]);
+  if (input_size) sha.processBytes(input, input_size);
+  StoreSha1(&sha, &state->sha_state[0]);
+}
+
+void XeCryptHmacShaFinal_entry(ppc_ptr_t<XECRYPT_HMACSHA_STATE> state, ppc_ptr_t<uint8_t> out, u32 out_size) {
+  uint8_t inner[0x14];
+  sha1::SHA1 sha_in;
+  InitSha1(&sha_in, &state->sha_state[0]);
+  sha_in.finalize(inner);
+  sha1::SHA1 sha_out;
+  InitSha1(&sha_out, &state->sha_state[1]);
+  sha_out.processBytes(inner, sizeof(inner));
+  uint8_t digest[0x14];
+  sha_out.finalize(digest);
+  if (out_size) std::copy_n(digest, std::min<size_t>(sizeof(digest), out_size), static_cast<uint8_t*>(out));
+}
+
 void XeCryptHmacSha_entry(mapped_void key, u32 key_size_in, mapped_void inp_1, u32 inp_1_size,
                           mapped_void inp_2, u32 inp_2_size, mapped_void inp_3, u32 inp_3_size,
                           mapped_void out, u32 out_size) {
@@ -678,9 +730,9 @@ REX_EXPORT_STUB(__imp__XeCryptHmacMd5Init);
 REX_EXPORT_STUB(__imp__XeCryptHmacMd5Update);
 REX_EXPORT_STUB(__imp__XeCryptHmacMd5Final);
 REX_EXPORT_STUB(__imp__XeCryptHmacMd5);
-REX_EXPORT_STUB(__imp__XeCryptHmacShaInit);
-REX_EXPORT_STUB(__imp__XeCryptHmacShaUpdate);
-REX_EXPORT_STUB(__imp__XeCryptHmacShaFinal);
+REX_EXPORT(__imp__XeCryptHmacShaInit, rex::kernel::xboxkrnl::XeCryptHmacShaInit_entry)
+REX_EXPORT(__imp__XeCryptHmacShaUpdate, rex::kernel::xboxkrnl::XeCryptHmacShaUpdate_entry)
+REX_EXPORT(__imp__XeCryptHmacShaFinal, rex::kernel::xboxkrnl::XeCryptHmacShaFinal_entry)
 REX_EXPORT_STUB(__imp__XeCryptHmacShaVerify);
 REX_EXPORT_STUB(__imp__XeCryptMd5Init);
 REX_EXPORT_STUB(__imp__XeCryptMd5Update);

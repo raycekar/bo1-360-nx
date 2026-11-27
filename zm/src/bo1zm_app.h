@@ -10,6 +10,7 @@
 
 #include <filesystem>
 
+#include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/rex_app.h>
 
@@ -19,6 +20,15 @@ class Bo1zmApp : public rex::ReXApp {
 
   static std::unique_ptr<rex::ui::WindowedApp> Create(rex::ui::WindowedAppContext& ctx) {
     return std::unique_ptr<Bo1zmApp>(new Bo1zmApp(ctx, "bo1zm", PPCImageConfig));
+  }
+
+  // Split screen: one offline profile per controller port (the SDK default is 1, so players 2-4 could not sign
+  // in). bo1zm.toml's offline_user_count still wins when it is set there. As in bo2-360-nx.
+  void OnPreSetup(rex::RuntimeConfig& config) override {
+    (void)config;
+    if (rex::cvar::GetFlagSource("offline_user_count") == rex::cvar::Source::kDefault) {
+      rex::cvar::SetFlagByName("offline_user_count", "4");
+    }
   }
 
   void OnConfigurePaths(rex::PathConfig& paths) override {
