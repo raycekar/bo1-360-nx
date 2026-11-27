@@ -53,6 +53,21 @@ int RunWindowedApp(int argc, char** argv) {
     if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
       return EXIT_FAILURE;
     }
+    // 1 ms timer resolution for the whole run. Guest Sleep(1)/short timed waits otherwise round up to the default
+    // 15.6 ms tick, which makes a frame that polls its job workers miss the 60 Hz vblank. Windows 11 also needs
+    // the process to opt out of timer throttling for the request to hold while the window is not in front.
+    if (HMODULE winmm = LoadLibraryA("winmm.dll")) {
+      using TimeBeginPeriodFn = UINT(WINAPI*)(UINT);
+      if (auto begin = reinterpret_cast<TimeBeginPeriodFn>(GetProcAddress(winmm, "timeBeginPeriod"))) {
+        begin(1);
+      }
+    }
+    PROCESS_POWER_THROTTLING_STATE throttling = {};
+    throttling.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+    throttling.ControlMask =
+        PROCESS_POWER_THROTTLING_EXECUTION_SPEED | PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
+    throttling.StateMask = 0;  // never throttle, always honour the timer resolution
+    SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &throttling, sizeof(throttling));
 #endif
 
     std::unique_ptr<rex::ui::WindowedApp> app = rex::ui::GetWindowedAppCreator()(app_context);

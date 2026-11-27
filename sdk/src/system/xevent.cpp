@@ -74,7 +74,9 @@ void XEvent::Query(uint32_t* out_type, uint32_t* out_state) {
 }
 
 int32_t XEvent::Set(uint32_t priority_increment, bool wait) {
+  std::lock_guard lock(state_mutex_);  // host state and poll hint change together
   event_->Set();
+  BumpPollHint(true);
   return 1;
 }
 
@@ -84,12 +86,16 @@ int32_t XEvent::Pulse(uint32_t priority_increment, bool wait) {
 }
 
 int32_t XEvent::Reset() {
+  std::lock_guard lock(state_mutex_);
   event_->Reset();
+  BumpPollHint(false);
   return 1;
 }
 
 void XEvent::Clear() {
+  std::lock_guard lock(state_mutex_);
   event_->Reset();
+  BumpPollHint(false);
 }
 
 bool XEvent::Save(stream::ByteStream* stream) {

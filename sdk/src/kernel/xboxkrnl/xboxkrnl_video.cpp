@@ -39,6 +39,19 @@
 #include <rex/system/thread_state.h>
 #include <rex/system/xthread.h>
 #include <rex/ui/flags.h>
+#include <fmt/format.h>
+
+#if REX_PLATFORM_WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <dbghelp.h>
+#include <tlhelp32.h>
+#endif
 
 namespace {
 // Display gamma type: 0 - linear, 1 - sRGB (CRT), 2 - BT.709 (HDTV), 3 - power
@@ -95,6 +108,9 @@ void WarnNoGpuEmulation(const char* export_name, std::atomic<bool>& warned) {
 REXCVAR_DEFINE_BOOL(log_guest_profile, true, "Log",
                     "Every 10 s, log where the guest threads spend their time: the return address (lr) of each "
                     "guest thread, sampled about 1000 times a second (map the addresses with tools/crash_triage.py)");
+REXCVAR_DEFINE_BOOL(log_host_profile, false, "Log",
+                    "Every 10 s, log the hottest host functions of the guest threads (instruction pointer sampled "
+                    "about 500 times a second, named through the PDB beside the exe). For performance work.");
 REXCVAR_DEFINE_BOOL(log_frame_stats, true, "Log",
                     "Every 10 s, log the guest frame rate (frames, fps, average and worst frame time)");
 
@@ -499,6 +515,128 @@ static void GuestSamplerLoop() {
   }
 }
 
+#if REX_PLATFORM_WIN32
+// Host sampling profiler (log_host_profile): suspends each guest thread for a moment about 500 times a second, reads
+// its instruction pointer and, every 10 s, logs the 30 hottest (thread, function) pairs. Functions are named through
+// the PDB beside the exe (dbghelp), so recompiled code shows as sub_XXXXXXXX and runtime code by its C++ name. Unlike
+// the lr sampler this sees leaf functions and time in native code (memcpy, the GPU, locks).
+static void HostSamplerLoop() {
+  HMODULE dbghelp = LoadLibraryA("dbghelp.dll");
+  if (!dbghelp) return;
+  using SymInitializeFn = BOOL(WINAPI*)(HANDLE, PCSTR, BOOL);
+  using SymFromAddrFn = BOOL(WINAPI*)(HANDLE, DWORD64, PDWORD64, void*);
+  using SymSetOptionsFn = DWORD(WINAPI*)(DWORD);
+  auto sym_init = reinterpret_cast<SymInitializeFn>(GetProcAddress(dbghelp, "SymInitialize"));
+  auto sym_from_addr = reinterpret_cast<SymFromAddrFn>(GetProcAddress(dbghelp, "SymFromAddr"));
+  auto sym_options = reinterpret_cast<SymSetOptionsFn>(GetProcAddress(dbghelp, "SymSetOptions"));
+  if (!sym_init || !sym_from_addr) return;
+  if (sym_options) sym_options(0x00000002 /*SYMOPT_UNDNAME*/ | 0x00000004 /*SYMOPT_DEFERRED_LOADS*/);
+  const HANDLE process = GetCurrentProcess();
+  if (!sym_init(process, nullptr, TRUE)) return;
+
+  using clock = std::chrono::steady_clock;
+  std::vector<std::pair<uint32_t, HANDLE>> threads;  // host thread id, handle
+  std::unordered_map<uint32_t, std::string> thread_labels;  // host id -> "tX" (guest) or "h<id>:<description>"
+  std::vector<std::pair<uint32_t, uint64_t>> samples;
+  std::unordered_map<uint64_t, std::string> names;  // rip -> function
+  std::unordered_map<std::string, uint32_t> counts;  // "tX name" -> samples
+  auto listed = clock::now() - std::chrono::seconds(10);
+  auto window = clock::now();
+  uint32_t passes = 0;
+  alignas(16) CONTEXT context;
+  for (;;) {
+    const auto now = clock::now();
+    if (now - listed >= std::chrono::seconds(1)) {
+      // Every thread of the process (guest threads and host ones: GPU command processor, audio, ...), by host id.
+      for (auto& [id, handle] : threads) CloseHandle(handle);
+      threads.clear();
+      std::unordered_map<DWORD, uint32_t> guest_ids;
+      for (auto& t : REX_KERNEL_OBJECTS()->GetObjectsByType<rex::system::XThread>()) {
+        if (t && t->thread() && t->thread()->native_handle()) {
+          guest_ids[GetThreadId(static_cast<HANDLE>(t->thread()->native_handle()))] = t->thread_id();
+        }
+      }
+      HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+      if (snap != INVALID_HANDLE_VALUE) {
+        THREADENTRY32 te = {};
+        te.dwSize = sizeof(te);
+        for (BOOL more = Thread32First(snap, &te); more; more = Thread32Next(snap, &te)) {
+          if (te.th32OwnerProcessID != GetCurrentProcessId() || te.th32ThreadID == GetCurrentThreadId()) continue;
+          HANDLE h = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_LIMITED_INFORMATION, FALSE,
+                                te.th32ThreadID);
+          if (!h) continue;
+          std::string label;
+          if (auto g = guest_ids.find(te.th32ThreadID); g != guest_ids.end()) {
+            label = fmt::format("t{:X}", g->second);
+          } else {
+            PWSTR desc = nullptr;
+            if (SUCCEEDED(GetThreadDescription(h, &desc)) && desc && *desc) {
+              for (PWSTR p = desc; *p && label.size() < 24; ++p) label += char(*p < 128 ? *p : '?');
+            }
+            if (desc) LocalFree(desc);
+            label = fmt::format("h{}{}{}", te.th32ThreadID, label.empty() ? "" : ":", label);
+          }
+          thread_labels[te.th32ThreadID] = label;
+          threads.push_back({te.th32ThreadID, h});
+        }
+        CloseHandle(snap);
+      }
+      listed = now;
+    }
+    samples.clear();
+    for (auto& [id, handle] : threads) {
+      // Nothing that allocates or locks between suspend and resume (the thread may hold the heap lock).
+      if (SuspendThread(handle) == DWORD(-1)) continue;
+      context.ContextFlags = CONTEXT_CONTROL;
+      const bool ok = GetThreadContext(handle, &context) != 0;
+      ResumeThread(handle);
+      if (ok) samples.push_back({id, context.Rip});
+    }
+    for (auto& [id, rip] : samples) {
+      auto it = names.find(rip);
+      if (it == names.end()) {
+        alignas(8) char buffer[sizeof(SYMBOL_INFO) + 256] = {};
+        auto* symbol = reinterpret_cast<SYMBOL_INFO*>(buffer);
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = 255;
+        DWORD64 displacement = 0;
+        std::string name = sym_from_addr(process, rip, &displacement, symbol)
+                               ? std::string(symbol->Name)
+                               : fmt::format("{:016X}", rip);
+        it = names.emplace(rip, std::move(name)).first;
+      }
+      ++counts[thread_labels[id] + " " + it->second];
+    }
+    ++passes;
+    if (now - window >= std::chrono::seconds(10)) {
+      // Leave out time blocked in the OS (waits, sleeps, message loops): the list is about work.
+      std::vector<std::pair<std::string, uint32_t>> top;
+      for (auto& [key, count] : counts) {
+        const auto fn = std::string_view(key).substr(key.find(' ') + 1);
+        if (fn.find("Wait") != std::string_view::npos || fn.find("Delay") != std::string_view::npos ||
+            fn.find("GetMessage") != std::string_view::npos || fn.find("FsControlFile") != std::string_view::npos ||
+            fn.find("RemoveIoCompletion") != std::string_view::npos ||
+            fn.find("ZwYieldExecution") != std::string_view::npos) {
+          continue;
+        }
+        top.push_back({key, count});
+      }
+      const size_t n = std::min<size_t>(40, top.size());
+      std::partial_sort(top.begin(), top.begin() + n, top.end(),
+                        [](const auto& a, const auto& b) { return a.second > b.second; });
+      REXKRNL_INFO("[hprof] {} passes; top {} busy (thread function):", passes, n);
+      for (size_t i = 0; i < n; ++i) {
+        REXKRNL_INFO("[hprof] {:5.1f}% {}", 100.0 * top[i].second / passes, top[i].first);
+      }
+      counts.clear();
+      passes = 0;
+      window = now;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+}
+#endif
+
 // Guest frame rate for PC test reports: one log line every 10 s (frames, fps, average/worst frame time and frames over
 // 33 ms). VdSwap is the guest's end of frame and runs on one thread. Off: log_frame_stats = false.
 static void CountGuestFrame() {
@@ -506,6 +644,9 @@ static void CountGuestFrame() {
   if (!sampler_started) {
     sampler_started = true;
     if (REXCVAR_GET(log_guest_profile)) std::thread(GuestSamplerLoop).detach();
+#if REX_PLATFORM_WIN32
+    if (REXCVAR_GET(log_host_profile)) std::thread(HostSamplerLoop).detach();
+#endif
   }
   if (!REXCVAR_GET(log_frame_stats)) return;
   using clock = std::chrono::steady_clock;

@@ -9,8 +9,12 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
+
+#include <rex/cvar.h>
+#include <rex/memory/utils.h>
 #include <unordered_map>
 #include <vector>
 
@@ -29,6 +33,13 @@
 #include <rex/system/xsemaphore.h>
 #include <rex/system/xsymboliclink.h>
 #include <rex/system/xthread.h>
+
+REXCVAR_DEFINE_BOOL(kernel_fast_event_poll, true, "Kernel",
+                    "Answer zero-timeout polls of unsignaled events without a host wait (BO1's job system polls "
+                    "about 200,000 times a second)");
+REXCVAR_DEFINE_BOOL(log_wait_profile, false, "Log",
+                    "Every 10 s, log where guest threads are blocked in waits (thread, caller, caller's caller, "
+                    "total time). For performance work.");
 
 namespace rex::system {
 
@@ -61,6 +72,61 @@ void LogLongTimeout(const char* kind, std::chrono::milliseconds timeout, XObject
   }
   REXSYS_WARN("[waitout] {} timed out after {} ms: thread t{:X} lr {:08X} object type {}", kind,
                timeout.count(), tid, lr, object ? int(object->type()) : -1);
+}
+
+// Wait accounting (log_wait_profile): time guest threads spend blocked in waits, per (thread, caller, caller's
+// caller), logged as the top 20 every 10 s. The caller's caller comes from the guest stack: the usual prologue
+// (mflr r12; stw r12,-8(r1); stwu r1,-N(r1)) leaves the saved lr 8 bytes below the back chain.
+struct WaitKey {
+  uint32_t tid, lr, parent;
+  bool operator==(const WaitKey& o) const { return tid == o.tid && lr == o.lr && parent == o.parent; }
+};
+struct WaitKeyHash {
+  size_t operator()(const WaitKey& k) const { return (size_t(k.tid) << 40) ^ (size_t(k.lr) << 16) ^ k.parent; }
+};
+
+void AccountWait(std::chrono::steady_clock::time_point start) {
+  if (!REXCVAR_GET(log_wait_profile)) return;
+  const auto now = std::chrono::steady_clock::now();
+  const double ms = std::chrono::duration<double, std::milli>(now - start).count();
+  auto* t = XThread::GetCurrentThread();
+  if (!t || !t->thread_state() || !t->thread_state()->context()) return;
+  auto* ctx = t->thread_state()->context();
+  WaitKey key{t->thread_id(), uint32_t(ctx->lr), 0};
+  auto* memory = kernel_state()->memory();
+  const uint32_t sp = uint32_t(ctx->r1.u32);
+  if (sp >= 0x40000000u && sp < 0x80000000u) {
+    const uint32_t chain = rex::memory::load_and_swap<uint32_t>(memory->TranslateVirtual<uint8_t*>(sp));
+    if (chain >= 0x40000000u && chain < 0x80000000u) {
+      key.parent = rex::memory::load_and_swap<uint32_t>(memory->TranslateVirtual<uint8_t*>(chain - 8));
+    }
+  }
+  static std::mutex m;
+  static std::unordered_map<WaitKey, std::pair<double, uint32_t>, WaitKeyHash> totals;
+  static auto window = now;
+  std::vector<std::pair<WaitKey, std::pair<double, uint32_t>>> dump;
+  {
+    std::lock_guard lock(m);
+    auto& e = totals[key];
+    e.first += ms;
+    e.second++;
+    if (now - window >= std::chrono::seconds(10)) {
+      dump.assign(totals.begin(), totals.end());
+      totals.clear();
+      window = now;
+    }
+  }
+  if (!dump.empty()) {
+    const size_t n = std::min<size_t>(20, dump.size());
+    std::partial_sort(dump.begin(), dump.begin() + n, dump.end(),
+                      [](const auto& a, const auto& b) { return a.second.first > b.second.first; });
+    REXSYS_INFO("[waits] 10 s, top {} blocked (thread, lr, caller's lr): ms total / count", n);
+    for (size_t i = 0; i < n; ++i) {
+      const auto& [k, v] = dump[i];
+      REXSYS_INFO("[waits] t{:X} lr {:08X} from {:08X}: {:.0f} ms / {} (avg {:.2f} ms)", k.tid, k.lr, k.parent,
+                  v.first, v.second, v.first / std::max(1u, v.second));
+    }
+  }
 }
 
 // The handle stash in a guest dispatcher header, read by GetNativeObject without the global lock.
@@ -265,13 +331,46 @@ X_STATUS XObject::Wait(uint32_t wait_reason, uint32_t processor_mode, uint32_t a
     return X_STATUS_SUCCESS;
   }
 
+  // Zero-timeout poll of an event that is known to be unsignaled: answer without a host wait (see XEvent::poll_hint).
+  XEvent* poll_event = nullptr;
+  uint64_t poll_seen = 0;
+  bool poll_check = false;  // a real poll although the hint said unsignaled (every 1024th, as a safety net)
+  if (opt_timeout && *opt_timeout == 0 && type() == Type::Event && REXCVAR_GET(kernel_fast_event_poll)) {
+    poll_event = static_cast<XEvent*>(this);
+    poll_seen = poll_event->poll_hint();
+    if (!(poll_seen & 1)) {
+      if ((poll_event->CountFastPoll() & 1023) != 0) {
+        return X_STATUS_TIMEOUT;
+      }
+      poll_check = true;
+    }
+  }
+
   auto timeout_ms = opt_timeout ? std::chrono::milliseconds(chrono::Clock::ScaleGuestDurationMillis(
                                       TimeoutTicksToMs(*opt_timeout)))
                                 : std::chrono::milliseconds::max();
 
   XThread::CheckTitleTermination();
+  const auto wait_start = std::chrono::steady_clock::now();
   auto result = rex::thread::Wait(wait_handle, alertable ? true : false, timeout_ms);
+  AccountWait(wait_start);
   XThread::CheckTitleTermination();
+  if (poll_check && result == rex::thread::WaitResult::kSuccess) {
+    static std::atomic<int> reported{0};
+    if (reported.fetch_add(1) < 5) {
+      auto* t = XThread::GetCurrentThread();
+      REXSYS_WARN("[pollhint] event {:08X} was signaled behind its poll hint (thread t{:X}, lr {:08X})", handle(),
+                  t ? t->thread_id() : 0,
+                  t && t->thread_state() ? uint32_t(t->thread_state()->context()->lr) : 0);
+    }
+    if (poll_event->manual_reset()) {
+      poll_event->RepairPollHint();
+    }
+  }
+  if (poll_event && (result == rex::thread::WaitResult::kTimeout ||
+                     (result == rex::thread::WaitResult::kSuccess && !poll_event->manual_reset()))) {
+    poll_event->ClearPollHint(poll_seen);
+  }
   switch (result) {
     case rex::thread::WaitResult::kSuccess:
       WaitCallback();
@@ -297,6 +396,12 @@ X_STATUS XObject::Wait(uint32_t wait_reason, uint32_t processor_mode, uint32_t a
 X_STATUS XObject::SignalAndWait(XObject* signal_object, XObject* wait_object, uint32_t wait_reason,
                                 uint32_t processor_mode, uint32_t alertable,
                                 uint64_t* opt_timeout) {
+  if (signal_object->type() == Type::Event) {
+    // Through XEvent::Set, so zero-timeout pollers see the signal (the host SignalAndWait would bypass the poll
+    // hint). Signal and wait are then two steps instead of one atomic call, which no caller here relies on.
+    static_cast<XEvent*>(signal_object)->Set(0, false);
+    return wait_object->Wait(wait_reason, processor_mode, alertable, opt_timeout);
+  }
   auto timeout_ms = opt_timeout ? std::chrono::milliseconds(chrono::Clock::ScaleGuestDurationMillis(
                                       TimeoutTicksToMs(*opt_timeout)))
                                 : std::chrono::milliseconds::max();
@@ -344,6 +449,11 @@ X_STATUS XObject::WaitMultiple(uint32_t count, XObject** objects, uint32_t wait_
                                 : std::chrono::milliseconds::max();
 
   XThread::CheckTitleTermination();
+  const auto wait_start = std::chrono::steady_clock::now();
+  struct AccountOnExit {
+    std::chrono::steady_clock::time_point start;
+    ~AccountOnExit() { AccountWait(start); }
+  } account_on_exit{wait_start};
   if (wait_type) {
     auto result =
         rex::thread::WaitAny(wait_handles, count, alertable ? true : false, timeout_ms);
