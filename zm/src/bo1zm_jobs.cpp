@@ -4,7 +4,8 @@
 // is none). On the 360 the six hardware threads share one L2 and the loop is cheap; on a PC every empty try reads the
 // lock-free queue's head and tail lines, which the main thread is writing to push jobs, so at 4 split-screen views the
 // main thread and all workers spent 50-60 % of their time in the queue code. After an empty try a worker now pauses
-// briefly (x86 PAUSE, bo1zm_job_backoff of them; 0 = off). Measured: no gain at 4 views (2026-11-27), so off by\n// default; the real limit there is the GPU command processor thread (see STATUS.md).
+// briefly (x86 PAUSE, bo1zm_job_backoff of them; 0 = off). Measured: no gain at 4 views (2026-11-27), so off by
+// default; the real limit there is the GPU command processor thread (see STATUS.md).
 
 #include <cstdint>
 
