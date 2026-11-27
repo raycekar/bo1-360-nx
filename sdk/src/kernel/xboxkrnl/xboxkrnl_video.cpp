@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <string>
 
 #include <rex/cvar.h>
@@ -84,6 +85,9 @@ void WarnNoGpuEmulation(const char* export_name, std::atomic<bool>& warned) {
   }
 }
 }  // namespace
+
+REXCVAR_DEFINE_BOOL(log_frame_stats, true, "Log",
+                    "Every 10 s, log the guest frame rate (frames, fps, average and worst frame time)");
 
 namespace rex::kernel::xboxkrnl {
 using namespace rex::system;
@@ -437,6 +441,33 @@ u32 VdRetrainEDRAM_entry(u32 unk0, u32 unk1, u32 unk2, u32 unk3, u32 unk4, u32 u
   return 0;
 }
 
+// Guest frame rate for PC test reports: one log line every 10 s (frames, fps, average/worst frame time and frames over
+// 33 ms). VdSwap is the guest's end of frame and runs on one thread. Off: log_frame_stats = false.
+static void CountGuestFrame() {
+  if (!REXCVAR_GET(log_frame_stats)) return;
+  using clock = std::chrono::steady_clock;
+  static clock::time_point window_start = clock::now();
+  static clock::time_point last = window_start;
+  static uint32_t frames = 0;
+  static uint32_t slow = 0;
+  static double worst_ms = 0;
+  const auto now = clock::now();
+  const double ms = std::chrono::duration<double, std::milli>(now - last).count();
+  last = now;
+  ++frames;
+  worst_ms = std::max(worst_ms, ms);
+  if (ms > 33.4) ++slow;
+  const double window_ms = std::chrono::duration<double, std::milli>(now - window_start).count();
+  if (window_ms >= 10000.0) {
+    REXKRNL_INFO("[frames] {:.0f} s: {} frames, {:.1f} fps, average {:.1f} ms, worst {:.1f} ms, {} over 33 ms",
+                 window_ms / 1000.0, frames, frames * 1000.0 / window_ms, window_ms / frames, worst_ms, slow);
+    window_start = now;
+    frames = 0;
+    slow = 0;
+    worst_ms = 0;
+  }
+}
+
 void VdSwap_entry(mapped_void buffer_ptr,      // ptr into primary ringbuffer
                   mapped_void fetch_ptr,       // frontbuffer Direct3D 9 texture header fetch
                   mapped_void unk2,            // system writeback ptr
@@ -445,6 +476,7 @@ void VdSwap_entry(mapped_void buffer_ptr,      // ptr into primary ringbuffer
                   mapped_u32 frontbuffer_ptr,  // ptr to frontbuffer address
                   mapped_u32 texture_format_ptr, mapped_u32 color_space_ptr, mapped_u32 width,
                   mapped_u32 height) {
+  CountGuestFrame();
   // All of these parameters are REQUIRED.
   assert(buffer_ptr);
   assert(fetch_ptr);

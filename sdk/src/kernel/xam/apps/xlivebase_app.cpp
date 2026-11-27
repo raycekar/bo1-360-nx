@@ -10,6 +10,11 @@
  */
 
 #include <rex/kernel/xam/apps/xlivebase_app.h>
+
+#include <algorithm>
+#include <mutex>
+#include <vector>
+
 #include <rex/logging.h>
 #include <rex/thread.h>
 
@@ -78,9 +83,18 @@ X_HRESULT XLiveBaseApp::DispatchMessageSync(uint32_t message, uint32_t buffer_pt
       return X_E_SUCCESS;
     }
   }
+  // Log each unknown message once: BO1 sends 0x0005800E (most likely XUserMuteListQuery) every frame, and an error
+  // line per frame also flushes the log file every frame.
+  static std::mutex seen_mutex;
+  static std::vector<uint32_t> seen;
+  {
+    std::lock_guard lock(seen_mutex);
+    if (std::find(seen.begin(), seen.end(), message) != seen.end()) return X_E_FAIL;
+    seen.push_back(message);
+  }
   REXKRNL_ERROR(
       "Unimplemented XLIVEBASE message app={:08X}, msg={:08X}, arg1={:08X}, "
-      "arg2={:08X}",
+      "arg2={:08X} (logged once)",
       app_id(), message, buffer_ptr, buffer_length);
   return X_E_FAIL;
 }
