@@ -56,6 +56,60 @@ REXCVAR_DEFINE_INT32(net_system_port_offset, 30000, "Kernel",
 REXCVAR_DECLARE(bool, net_online_trace);
 REXCVAR_DEFINE_BOOL(net_system_link_trace, false, "Kernel",
                     "System link: log the first packets sent and received on a title's moved ports (below 1024)");
+REXCVAR_DEFINE_BOOL(net_system_link_dump, false, "Kernel",
+                    "System link: log every packet on a title's moved ports with its first bytes (5000 lines at most)");
+REXCVAR_DEFINE_STRING(net_lan_address, "", "Kernel",
+                      "System link: use this IPv4 address as this console's LAN address and bind to it instead of all "
+                      "interfaces. Two copies on one PC: 127.0.0.1 and 127.0.0.2 (with net_system_link_peers)");
+REXCVAR_DEFINE_STRING(net_system_link_peers, "", "Kernel",
+                      "System link: comma-separated IPv4 addresses that also get every System Link broadcast, unicast "
+                      "(loopback carries no broadcasts; for two copies on one PC)");
+
+namespace {
+uint32_t ParseIpv4(const std::string& text) {
+  unsigned a = 0, b = 0, c = 0, d = 0;
+  char tail = 0;
+  if (std::sscanf(text.c_str(), "%u.%u.%u.%u%c", &a, &b, &c, &d, &tail) != 4 || a > 255 || b > 255 || c > 255 ||
+      d > 255) {
+    return 0;
+  }
+  return (a << 24) | (b << 16) | (c << 8) | d;
+}
+
+// net_system_link_dump: every packet on a moved port (below 1024) with its first 32 bytes, up to 5000 lines.
+void TraceBytes(const char* what, uint32_t ip, uint16_t guest_port, const uint8_t* data, int bytes) {
+  if (!REXCVAR_GET(net_system_link_dump) || !guest_port || guest_port >= 1024 || bytes <= 0) return;
+  static std::atomic<int> lines{0};
+  if (lines.fetch_add(1, std::memory_order_relaxed) >= 5000) return;
+  std::string hex;
+  for (int i = 0; i < bytes && i < 32; ++i) {
+    static const char* digits = "0123456789ABCDEF";
+    hex += digits[data[i] >> 4];
+    hex += digits[data[i] & 15];
+    if (i % 4 == 3) hex += ' ';
+  }
+  std::string text;
+  for (int i = 0; i < bytes && i < 48; ++i) text += (data[i] >= 32 && data[i] < 127) ? char(data[i]) : '.';
+  REXSYS_INFO("[link] {} {}.{}.{}.{}:{} {} bytes: {}| {}", what, ip >> 24, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF,
+              ip & 0xFF, guest_port, bytes, hex, text);
+}
+
+// net_lan_address, host byte order; 0 when unset.
+uint32_t LanOverride() { return ParseIpv4(REXCVAR_GET(net_lan_address)); }
+
+// net_system_link_peers, host byte order.
+std::vector<uint32_t> LinkPeers() {
+  std::vector<uint32_t> peers;
+  const std::string list = REXCVAR_GET(net_system_link_peers);
+  size_t pos = 0;
+  while (pos <= list.size()) {
+    const size_t end = std::min(list.find(',', pos), list.size());
+    if (const uint32_t ip = ParseIpv4(list.substr(pos, end - pos))) peers.push_back(ip);
+    pos = end + 1;
+  }
+  return peers;
+}
+}  // namespace
 
 #if REX_PLATFORM_SWITCH
 REXCVAR_DEFINE_INT32(switch_net_idle_poll_us, 1000, "Kernel",
@@ -177,6 +231,12 @@ bool QueryLan(uint32_t& ip, uint32_t& mask) {
   mask = ntohl(subnet);
   return true;
 #else
+  if (const uint32_t forced = LanOverride()) {
+    // A set address (two copies on one PC): the whole loopback range counts as the LAN.
+    ip = forced;
+    mask = (forced >> 24) == 127 ? 0xFF000000u : 0xFFFFFF00u;
+    return true;
+  }
   // The address of the interface the system would route a LAN packet through; connecting a datagram socket sends
   // nothing.
   const auto handle = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -895,7 +955,7 @@ int64_t OpenSideSocket(uint16_t port, bool* bound) {
   sockaddr_in any{};
   any.sin_family = AF_INET;
   any.sin_port = htons(port);
-  any.sin_addr.s_addr = htonl(INADDR_ANY);
+  any.sin_addr.s_addr = htonl(LanOverride() ? LanOverride() : INADDR_ANY);
 #if REX_PLATFORM_SWITCH
   any.sin_len = sizeof(any);
 #endif
@@ -1097,6 +1157,9 @@ X_STATUS XSocket::Connect(N_XSOCKADDR* name, int name_len) {
 X_STATUS XSocket::Bind(N_XSOCKADDR_IN* guest_name, int name_len) {
   N_XSOCKADDR_IN moved = *guest_name;
   moved.sin_port = system_link::HostPort(guest_name->sin_port);
+  if (moved.sin_addr == 0 && LanOverride()) {
+    moved.sin_addr = LanOverride();  // net_lan_address: this copy's own address, so another copy can take the port
+  }
   N_XSOCKADDR_IN* name = &moved;
   int ret = bind(native_handle_, (sockaddr*)name, name_len);
   if (ret < 0) {
@@ -1306,6 +1369,7 @@ int XSocket::RecvFrom(uint8_t* buf, uint32_t buf_len, uint32_t flags, N_XSOCKADD
     from->sin_addr = reported;  // BE <- BE
     if (ret > 0) {
       system_link::TraceReceive(reported, from->sin_port, ret);
+      TraceBytes("recv", reported, from->sin_port, buf, ret);
       system_link::NotePeer(reported, from->sin_port);
     }
     std::memset(from->x_sin_zero, 0, sizeof(from->x_sin_zero));
@@ -1423,7 +1487,20 @@ int XSocket::SendTo(uint8_t* buf, uint32_t buf_len, uint32_t flags, N_XSOCKADDR_
                                  reinterpret_cast<const uint8_t*>(data), int(buf_len));
     }
   }
+  if (to && IsBroadcast(ntohl(nto.sin_addr.s_addr))) {
+    // net_system_link_peers: the other copies on this PC get the broadcast unicast.
+    uint32_t self = 0;
+    system_link::LanAddress(&self);
+    for (const uint32_t peer : LinkPeers()) {
+      if (peer == self) continue;
+      sockaddr_in copy = nto;
+      copy.sin_addr.s_addr = htonl(peer);
+      const int copied = sendto(native_handle_, data, buf_len, flags, (sockaddr*)&copy, sizeof(copy));
+      system_link::TraceSend(peer, to->sin_port, copied, 0);
+    }
+  }
   if (to) system_link::TraceSend(ntohl(nto.sin_addr.s_addr), to->sin_port, ret, error);
+  if (to) TraceBytes("send", ntohl(nto.sin_addr.s_addr), to->sin_port, reinterpret_cast<const uint8_t*>(data), int(buf_len));
   // A broadcast Windows refuses on the title's own socket (WSAEACCES although SO_BROADCAST is set) goes out from a
   // helper socket instead: a System Link search reply's source port does not matter to the searcher.
   if (to && ret < 0 && IsBroadcast(ntohl(nto.sin_addr.s_addr))) {
