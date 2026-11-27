@@ -457,6 +457,9 @@ static void CountGuestFrame() {
   ++frames;
   worst_ms = std::max(worst_ms, ms);
   if (ms > 33.4) ++slow;
+  static bool started = false;
+  if (ms >= 100.0 && started) REXKRNL_WARN("[hitch] frame took {:.1f} ms", ms);
+  started = true;
   const double window_ms = std::chrono::duration<double, std::milli>(now - window_start).count();
   if (window_ms >= 10000.0) {
     REXKRNL_INFO("[frames] {:.0f} s: {} frames, {:.1f} fps, average {:.1f} ms, worst {:.1f} ms, {} over 33 ms",

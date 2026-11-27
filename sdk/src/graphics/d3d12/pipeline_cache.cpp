@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cinttypes>
 #include <cmath>
 #include <cstring>
@@ -928,10 +929,18 @@ bool PipelineCache::ConfigurePipeline(
   if (!vertex_shader->is_translated() && !use_async) {
     std::lock_guard<std::mutex> lock(translation_request_lock_);
     if (!vertex_shader->is_translated()) {
+      const auto stall_start = std::chrono::steady_clock::now();
       if (!TranslateAnalyzedShader(*shader_translator_, *vertex_shader, dxbc_converter_, dxc_utils_,
                                    dxc_compiler_)) {
         REXGPU_ERROR("Failed to translate the vertex shader!");
         return false;
+      }
+      // PC test reports: a draw without a pixel shader (depth only) is never async, so it waits here.
+      const double stall_ms =
+          std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - stall_start).count();
+      if (stall_ms >= 20.0) {
+        REXGPU_WARN("[stall] vertex shader translated on the draw thread: {:.1f} ms ({})", stall_ms,
+                    pixel_shader ? "async off" : "no pixel shader");
       }
       if (shader_storage_file_ &&
           vertex_shader->shader().ucode_storage_index() != shader_storage_index_) {
@@ -1033,7 +1042,14 @@ bool PipelineCache::ConfigurePipeline(
     }
     creation_request_cond_.notify_one();
   } else {
+    const auto stall_start = std::chrono::steady_clock::now();
     new_pipeline->state.store(CreateD3D12Pipeline(runtime_description), std::memory_order_release);
+    const double stall_ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - stall_start).count();
+    if (stall_ms >= 20.0) {
+      REXGPU_WARN("[stall] pipeline created on the draw thread: {:.1f} ms ({})", stall_ms,
+                  pixel_shader ? "async off" : "no pixel shader");
+    }
   }
 
   if (pipeline_storage_file_) {

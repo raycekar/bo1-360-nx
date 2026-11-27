@@ -150,3 +150,11 @@ gamer card UI, network QoS and voice, unused I/O manager calls, `ObIsTitleObject
 - **MP HUD/menus**: MP split screen is native 4-player (`party_maxlocalplayers 4`, `default_splitscreen.cfg` HUD
   scale). The port only lifts System Link from 2 (`bo1mp_systemlink_local_players`). Nothing else to change before a
   PC run.
+
+## PC results (build 03, 2026-11-27, Ryzen 7 5800H + RTX 3060 Laptop, D3D12)
+
+- **3-player split-screen Zombies works** (Nacht): 3 pads in connection order (Elite 2, Series X, One S), the match
+  runs at 45-52 fps against 55-60 solo. Menus/lobby 60 fps.
+- All modes start: Zombies, Multiplayer (in a match ~36 fps), campaign (14-24 fps).
+- Hitches of 100-480 ms every 10-20 s in every mode, with no I/O at the time; the same with 1 or 3 players.
+  Suspect: draws without a pixel shader are never async in the D3D12 pipeline cache (build 04 logs `[stall]`).
