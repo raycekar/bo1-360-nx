@@ -8,6 +8,37 @@ $ErrorActionPreference = 'Stop'
 $Dest = $Dest.TrimEnd('\')
 $Source = $Source.TrimEnd('\')
 
+# First send the logs of earlier test runs to the server (out\reports\<PC name>\<build>\): only new or changed
+# files. Logs are in logs\ beside each exe (the top folder and builds\<name>\). A failure here never stops the sync.
+try {
+  $reports = Join-Path (Split-Path -Parent $Source) ('reports\' + $env:COMPUTERNAME)
+  $logDirs = @()
+  if (Test-Path -LiteralPath (Join-Path $Dest 'logs')) { $logDirs += ,@('top', (Join-Path $Dest 'logs')) }
+  $buildsDir = Join-Path $Dest 'builds'
+  if (Test-Path -LiteralPath $buildsDir) {
+    foreach ($b in Get-ChildItem -LiteralPath $buildsDir -Directory) {
+      $l = Join-Path $b.FullName 'logs'
+      if (Test-Path -LiteralPath $l) { $logDirs += ,@($b.Name, $l) }
+    }
+  }
+  $sent = 0; $failed = 0
+  foreach ($pair in $logDirs) {
+    foreach ($f in Get-ChildItem -LiteralPath $pair[1] -File -Recurse) {
+      $dst = Join-Path (Join-Path $reports $pair[0]) $f.FullName.Substring($pair[1].Length).TrimStart('\')
+      $d = Get-Item -LiteralPath $dst -ErrorAction SilentlyContinue
+      if ($d -and $d.Length -eq $f.Length -and $d.LastWriteTimeUtc -eq $f.LastWriteTimeUtc) { continue }
+      try {
+        New-Item -ItemType Directory -Path (Split-Path -Parent $dst) -Force | Out-Null
+        Copy-Item -LiteralPath $f.FullName -Destination $dst -Force
+        (Get-Item -LiteralPath $dst).LastWriteTimeUtc = $f.LastWriteTimeUtc
+        $sent++
+      } catch { $failed++ }  # for example a log that a running game still holds
+    }
+  }
+  if ($sent) { Write-Host "Sent $sent log file(s) to $reports" -ForegroundColor Green } else { Write-Host 'No new logs to send.' }
+  if ($failed) { Write-Host "$failed log file(s) could not be sent (is the game still running?)." -ForegroundColor Yellow }
+} catch { Write-Host "Could not send the logs ($($_.Exception.Message)). The sync goes on." -ForegroundColor Yellow }
+
 $srcManifest = Join-Path $Source 'manifest.json'
 if (-not (Test-Path -LiteralPath $srcManifest)) { throw "No manifest.json in $Source. Check SOURCE in sync.cmd." }
 $new = Get-Content -LiteralPath $srcManifest -Raw | ConvertFrom-Json

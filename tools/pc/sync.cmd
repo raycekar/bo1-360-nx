@@ -3,6 +3,7 @@ rem ---------------------------------------------------------------------------
 rem  bo1-360-nx: copy the latest build from the network folder to this folder.
 rem  Put this file in the folder where you want the game (any folder) and run it.
 rem  The first run copies everything (about 11 GB); later runs copy only changes.
+rem  Each run first sends the game logs to the server (out\reports), then syncs.
 rem
 rem  Set SOURCE to the build folder on the network drive (the folder that holds
 rem  manifest.json). Example, if the server's workspace is drive F: at

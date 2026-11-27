@@ -31,6 +31,8 @@ Everything runs on a Linux x86-64 machine; the result runs on Windows x64. Paths
    tested build, move its folder out and package again: the sync removes it on the PC.
 
 ## On the PC
+Each `sync.cmd` run first uploads new or changed files from every `logs\` folder (top and `builds\<name>\`) to
+`out\reports\<PC name>\<top|build name>\` (needs a writable share), then syncs.
 Copy `out/win/sync.cmd` to any folder, set `SOURCE` in it to the network path of `out/win`, run it. The first run
 copies everything (~10 GB), later runs only what changed; `bo1zm.toml` is copied once and then left alone. Needs the
 Microsoft Visual C++ 2015-2022 x64 runtime. Start `bo1zm.exe`.
