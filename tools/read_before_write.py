@@ -61,6 +61,13 @@ def effect(s):
     """(reads, writes, is_save) of one statement, for the localized registers."""
     if s.startswith(("PPC", "uint", "REX_FUNC_PROLOGUE", "const auto s_")) or SELF_MOVE.match(s):
         return set(), set(), False
+    # setjmp_locals.py snapshot (`const auto sj_r31 = r31;`): it keeps the value as it was at the setjmp, to put
+    # back on a longjmp. That is what the 360 does too, whatever the value, so it counts as a save.
+    if s.startswith("const auto sj_"):
+        return set(REG.findall(s.split("=", 1)[1])), set(), True
+    # ... and its restore after a longjmp (`if (temp.s64 != 0) { ctx = env; cr6 = sj_cr6; r31 = sj_r31; }`): writes only.
+    if s.startswith("if (temp.s64 != 0) { ctx = env;"):
+        return set(), {m.group(1) for m in re.finditer(r"\b(\w+) = sj_\1;", s) if REG.fullmatch(m.group(1))}, False
     ms = STORE_TO_STACK.match(s)
     if ms and REG.fullmatch(ms.group(1)):
         return {ms.group(1)}, set(), True
@@ -230,6 +237,7 @@ KNOWN = {
     # BO1 TU11 default.xex (Zombies), checked 2026-11-27
     "sub_824CC150": "BO1 ZM: xor r30,r30,r30 (zero whatever r30 held)",
     "sub_824CC4E0": "BO1 ZM: VMX copy kernel: stvlx128 saves of v64/v65 and xor r30,r30,r30",
+    "sub_824CBC84": "BO1 ZM: VMX copy kernel: stvx128 saves of v64/v65 at -0x20/-0x30(r1) in its prologue",
     "sub_82514CC8": "BO1 ZM: subfe r29,r29,r29: the result is -1 + CA whatever r29 held",
     "sub_825ED9E0": "BO1 ZM: the game's setjmp itself (saves every register); every call goes through ppc_setjmp",
     "sub_825FE764": "BO1 ZM: not code: the pointer 0x825FE790 and a zero word, decoded as one lwz",

@@ -33,6 +33,11 @@ class Bo1zmApp : public rex::ReXApp {
     if (config.gpu_plugin.empty() && rex::cvar::GetFlagSource("gpu_plugin") == rex::cvar::Source::kDefault) {
       config.gpu_plugin = "xenos";
     }
+    // No screen tearing by default (first PC tests, 2026-11-27): the SDK lets the swap chain tear for variable refresh
+    // rate. bo1zm.toml can set d3d12_allow_variable_refresh_rate_and_tearing = true for G-Sync / FreeSync.
+    if (rex::cvar::GetFlagSource("d3d12_allow_variable_refresh_rate_and_tearing") == rex::cvar::Source::kDefault) {
+      rex::cvar::SetFlagByName("d3d12_allow_variable_refresh_rate_and_tearing", "false");
+    }
     if (rex::cvar::GetFlagSource("offline_user_count") == rex::cvar::Source::kDefault) {
       rex::cvar::SetFlagByName("offline_user_count", "4");
     }

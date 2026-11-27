@@ -40,8 +40,14 @@ foreach(d crt/include sdk/include/ucrt sdk/include/um sdk/include/shared sdk/inc
     string(APPEND _inc " -Xclang -internal-isystem -Xclang \"${BO1_XWIN}/${d}\"")
   endif()
 endforeach()
-set(CMAKE_C_FLAGS_INIT "-fuse-ld=lld -march=x86-64-v2 ${_inc}")
-set(CMAKE_CXX_FLAGS_INIT "-fuse-ld=lld -march=x86-64-v2 ${_inc}")
+# CPU level of the PC build: x86-64-v2 (SSE4.2, default) or x86-64-v3 (AVX2, Intel Haswell / AMD Zen and newer), from
+# the environment variable BO1_MARCH. It is read when a build folder is configured first: use a new folder to change it.
+set(_bo1_march "x86-64-v2")
+if(DEFINED ENV{BO1_MARCH} AND NOT "$ENV{BO1_MARCH}" STREQUAL "")
+  set(_bo1_march "$ENV{BO1_MARCH}")
+endif()
+set(CMAKE_C_FLAGS_INIT "-fuse-ld=lld -march=${_bo1_march} ${_inc}")
+set(CMAKE_CXX_FLAGS_INIT "-fuse-ld=lld -march=${_bo1_march} ${_inc}")
 set(CMAKE_RC_FLAGS_INIT "-I \"${BO1_XWIN}/sdk/include/um\" -I \"${BO1_XWIN}/sdk/include/shared\"")
 
 set(_lib "-L\"${BO1_XWIN}/crt/lib/x86_64\" -L\"${BO1_XWIN}/sdk/lib/um/x86_64\" -L\"${BO1_XWIN}/sdk/lib/ucrt/x86_64\"")

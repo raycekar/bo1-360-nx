@@ -21,5 +21,8 @@
 # GPU plugin (default "xenos" = rexgpu-xenos.dll beside the exe)
 # gpu_plugin = "xenos"
 
+# Screen tearing (default false = no tearing). true: lower latency and variable refresh (G-Sync / FreeSync), may tear
+# d3d12_allow_variable_refresh_rate_and_tearing = false
+
 # Log level: trace, debug, info, warning, error
 # log_level = "info"
