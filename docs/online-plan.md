@@ -33,13 +33,24 @@ From bo2-360-nx's SDK, which this repo uses (`sdk/src/system/xsocket.cpp`, `onli
 bo2-360-nx drives this from new pages in BO2's Lua menus. BO1's menus are `.menu` files, and editing them is more
 work, so the plan uses the port's own UI:
 
-1. **Settings, for a first version** (no UI work): `bo1zm_online = "host"` or `bo1zm_online = "XXXX-XXXX"` in
-   `bo1zm.toml`. The app calls `online::Start` at boot. The log (and a one-line ImGui overlay) shows the state and,
-   for the host, the join code to send to friends. The players then use the game's normal **System Link** menu.
+1. **Settings, first version (done, `common/bo1_online.cpp`, both games)**: `bo1_online = "host"` or
+   `bo1_online = "XXXX-XXXX"` in `bo1zm.toml` / `bo1mp.toml`. `OnPostSetup` calls `online::Start`; a status window
+   (top left, no input) shows the state, the router result and, for the host, the join code, and closes 30 s after
+   the session is ready (a dialog that stays open makes the presenter paint from the UI thread: see rex_app.cpp).
+   The log has the same lines (`bo1 online: ...`, `JOIN CODE ...`). `OnShutdown` removes the UPnP forwarding.
+   The players then use the game's normal **System Link** menu.
 2. **Then an in-game panel**: an ImGui window from the SDK (`OnCreateDialogs`), opened by a key, with Host / Join /
    Stop, the code, and the checklist that `online::Current()` reports (router, public address, relay peers).
 3. Optional: menu items in the System Link lobby (patch the `.menu` assets after load, as the script patcher does for
    GSC).
+
+## Game-side findings (static, 2026-11-27)
+
+- Zombies System Link runs `xsignin ; systemlink 1 ; splitscreen 0 ; party_maxlocalplayers 2` and opens
+  `menu_systemlink_lobby` (`xstartpartyhost`, start with `xpartygo`). With the 4-player hook, `party_maxlocalplayers`
+  stays at the port's value, so a PC can bring 2+ local players into a System Link lobby; `party_maxplayers` (4) caps
+  the total (free-slot code `sub_8232E1B8` / `sub_8232E268`).
+- The online menus run `xsigninlivenoguests`: Xbox Live play is not a target; System Link is.
 
 ## Risks and checks
 

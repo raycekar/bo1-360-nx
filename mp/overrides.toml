@@ -18,3 +18,36 @@ skip_msr = true
 # --- Tail-branch targets, round 1 (tools/codegen_fix_unresolved.py) ---
 "0x823EB008" = { }   # stw r4, 0x20(r3); blr   <- 0x82461FD0
 "0x82428728" = { }   # lwz r11, 0x1dc(r4); cmpwi cr6, r11, 0x400; blt cr6, 0x82428750; lis r10, -0x7d73; mulli r9, r11, 0x320; lwz r10, 0x7148(r10)   <- 0x8242882C
+
+# --- Code gaps, round 1 (tools/codegen_gaps.py, 2026-11-27): code no function covered. Most are this-adjust
+# thunks (addi r3, r3, -N ; b) and small functions that vtables / script builtin tables point to: an indirect call
+# to one would stop the game ("Call to invalid or unregistered function").
+"0x821F01C0" = { }   # 48 B: lhz r11, 0x29a(r3)
+"0x821F69E8" = { }   # 52 B: lis r10, -0x7d6a
+"0x823EE1D8" = { }   # 24 B: extsh r10, r3
+"0x8247E5E0" = { }   # 52 B: lwz r11, 0x48(r3)
+"0x82596250" = { }   # 8 B: addi r3, r3, -8
+"0x8259A198" = { }   # 8 B: addi r3, r3, -4
+"0x8259A1A0" = { }   # 8 B: addi r3, r3, -4
+"0x8259A1A8" = { }   # 8 B: addi r3, r3, -4
+"0x8259A1B0" = { }   # 8 B: addi r3, r3, -4
+"0x8259A1B8" = { }   # 8 B: addi r3, r3, -4
+"0x8259A1C8" = { }   # 8 B: addi r3, r3, -4
+"0x825A0118" = { }   # 8 B: addi r3, r3, -4
+"0x825A0128" = { }   # 8 B: addi r3, r3, -4
+"0x825A0130" = { }   # 8 B: addi r3, r3, -4
+"0x825A0138" = { }   # 8 B: addi r3, r3, -4
+"0x825A03E0" = { }   # 8 B: addi r3, r3, -4
+"0x825A03E8" = { }   # 8 B: addi r3, r3, -4
+"0x825A03F0" = { }   # 8 B: addi r3, r3, -4
+"0x825A03F8" = { }   # 8 B: addi r3, r3, -4
+"0x825A0400" = { }   # 8 B: addi r3, r3, -4
+"0x825A0408" = { }   # 8 B: addi r3, r3, -4
+"0x825A0410" = { }   # 8 B: addi r3, r3, -4
+"0x825A5470" = { }   # 24 B: lwz r11, 0x48(r3)
+"0x825A6100" = { }   # 8 B: addi r3, r3, -0x10
+"0x825A6D88" = { }   # 8 B: addi r3, r3, -0x24
+"0x825A6D90" = { }   # 8 B: addi r3, r3, -0x20
+"0x825A9B20" = { }   # 44 B: lhz r11, 0x28(r3)
+"0x825B8AE0" = { }   # 8 B: addi r3, r3, -4
+"0x823EADB8" = { }   # 4 B: b 0x823dc810 (thunk; 1 pointer to it)

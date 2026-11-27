@@ -81,6 +81,25 @@ All 659 `.gsc` and 145 `.csc` scripts were extracted from the Zombies zones, the
     (`sub_823D7F88`) for N local clients: N = 4 in the front end, `splitscreen_playerCount` (at least 2) in split
     screen, else 1. `splitscreen_playerCount` is an int dvar, default 1, range 1-4 (`sub_823D86xx`).
 
+## Join flow for players 3 and 4 (static, 2026-11-27)
+
+No gate other than `party_maxlocalplayers` (hooked to 4) was found:
+
+- Split-screen sign-in state (`sub_823DB310`) loops over **4** slots and sets the `signin%i_vis`,
+  `joingame%i_vis`, `waiting%i_vis`, `startgame%i_vis`, `leavegame%i_vis`, `changeusers%i_vis` and `playername%i` dvars.
+  `makeLocalClientActive` (`sub_823DB510`, command table at `0x823DCB50`) takes a controller index from the
+  command and marks it active; it does not check a count.
+- Free local party slots (`sub_8232E1B8`): `min(party_maxlocalplayers - used, ...)`, with a hard cap of 4 on the
+  total, then capped by `party_maxplayers` (`sub_8232E268`).
+- The Zombies lobby (`menu_gamesetup_splitscreen`) has the feeder `splitscreen_playerlist` and starts with
+  `uiScript StartServer`; it opens `local_splitscreen_error` when `splitscreen_playerCount` is wrong. Back out runs
+  `splitscreen_playerCount 1 ; forcedisableallbutprimaryclients`.
+- PC side: SDL pads go to guest users 0-3 in connection order (`SlotAssignment`, `SDL_SetGamepadPlayerIndex`);
+  keyboard/mouse is user 0. The app signs in 4 offline profiles (`offline_user_count = 4`).
+
+Run-time checks: players 3 and 4 press START in the split-screen lobby; the lobby list shows 4; the match starts
+with 4 views. If a pad does not join, check the log for its SDL connection order.
+
 ## How to reproduce
 
 ```
@@ -103,3 +122,13 @@ gamer card UI, network QoS and voice, unused I/O manager calls, `ObIsTitleObject
   then both identity, so the result is consistent on one machine.
 - Split screen: the SDK made 1 offline profile by default. The app now sets `offline_user_count = 4`, as bo2-360-nx
   does. Input maps physical pad N to guest user N (SlotAssignment); keyboard and mouse join user 0.
+
+## Multiplayer local players (static, 2026-11-27)
+
+- `ui_mp.ff` / `patch_ui_mp.ff` set `party_maxlocalplayers` per mode: split screen **4**, System Link **2**,
+  theater 1. MP also has per-mode dvars `party_maxlocalplayers_playermatch / _privatematch / _wagermatch /
+  _basictraining / _theater` (online modes, not used by System Link).
+- Port: `mp/src/bo1mp_local_players.cpp` hooks Dvar_SetVariant (`sub_823E2418`; Zombies has the same function at
+  `sub_823792F8`): a set of `party_maxlocalplayers` to 2 becomes `bo1mp_systemlink_local_players` (default 4);
+  1 and 4 pass. The dvar value is 16 bytes passed by value in r4:r5, the int in the high word of r4 (checked at the
+  caller `sub_823E4400`).

@@ -1,0 +1,10 @@
+# Speed options (register-as-local): PPC registers become C++ locals, which the compiler keeps in host registers.
+# OFF until the first PC runs work. To turn on, add "speed.toml" to includes in the manifest, then codegen.sh
+# (it runs tools/setjmp_locals.py --fix and tools/read_before_write.py --strict) and a full build_windows.sh.
+# Checked on Zombies 2026-11-27: 5 early reads, all harmless (KNOWN in read_before_write.py); 15 setjmp sites, all
+# fixed by setjmp_locals.py. MP: 5 early reads, all harmless; 16 setjmp sites (2 need the fix).
+cr_as_local = true
+xer_as_local = true
+ctr_as_local = true
+non_volatile_as_local = true
+vector_scratch_as_local = true

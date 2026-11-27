@@ -14,6 +14,8 @@
 #include <rex/filesystem.h>
 #include <rex/rex_app.h>
 
+#include "bo1_online.h"
+
 class Bo1zmApp : public rex::ReXApp {
  public:
   using rex::ReXApp::ReXApp;
@@ -44,4 +46,13 @@ class Bo1zmApp : public rex::ReXApp {
       if (paths.cache_root == default_user / "cache") paths.cache_root = exe / "user" / "cache";
     }
   }
+  // Online co-op (bo1_online in the toml): start the connection, show the status window for a short time.
+  void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override { imgui_drawer_for_online_ = drawer; }
+  void OnPostSetup() override {
+    if (bo1::StartOnlineFromSettings()) bo1::ShowOnlineStatus(imgui_drawer_for_online_);
+  }
+  void OnShutdown() override { bo1::ShutdownOnline(); }
+
+ private:
+  rex::ui::ImGuiDrawer* imgui_drawer_for_online_ = nullptr;
 };

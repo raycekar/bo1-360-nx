@@ -20,6 +20,7 @@
 #include <rex/platform/exceptions.h>  // SEH exception support
 #include <rex/kernel/crt/heap.h>
 #include <rex/runtime.h>
+#include <rex/system/crash_report.h>
 #include <rex/system/export_resolver.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/function_dispatcher.h>
@@ -204,6 +205,7 @@ X_STATUS Runtime::Setup(const rex::PPCImageInfo& image_info, RuntimeConfig confi
   }
 
   codegen_flags_ = image_info.codegen_flags;
+  rex::runtime::InstallCrashReporter();  // "[CRASH]" lines in the log (tools/crash_triage.py)
 
   if (!function_dispatcher_->InitializeFunctionTable(image_info.code_base, image_info.code_size,
                                                      image_info.image_base, image_info.image_size,

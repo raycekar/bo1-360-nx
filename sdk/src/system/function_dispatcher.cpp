@@ -20,6 +20,7 @@
 #include <rex/memory.h>
 #include <rex/ppc/context.h>
 #include <rex/runtime.h>
+#include <rex/system/crash_report.h>
 #include <rex/system/function_dispatcher.h>
 #include <rex/system/thread_state.h>
 
@@ -34,7 +35,9 @@ FunctionDispatcher* GetBoundFunctionDispatcher() {
 
 }  // namespace
 
-static void InvalidFunctionTrap(PPCContext& ctx, uint8_t* /*base*/) {
+static void InvalidFunctionTrap(PPCContext& ctx, uint8_t* base) {
+  // ctx.lr is the return address of the bctrl (for a bctr tail call: of the caller's caller).
+  LogGuestCrashState(ctx, base);
   REX_FATAL("Call to invalid or unregistered function at guest address 0x{:08X}",
             ctx.last_indirect_target);
 }

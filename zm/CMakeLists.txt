@@ -13,6 +13,7 @@ include(generated/rexglue.cmake)
 # Sources
 set(BO1ZM_SOURCES
     src/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/bo1_online.cpp
     src/bo1zm_local_players.cpp
     src/bo1zm_script_patch.cpp
 )
@@ -27,9 +28,15 @@ rexglue_setup_target(bo1zm GPU_PLUGINS xenos)
 
 # rex_app.cpp (compiled into this target) includes imgui.h, but rexruntime links imgui privately, so the include
 # path does not reach us when the SDK is a subdirectory (as in bo2-360-nx).
+target_include_directories(bo1zm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../common)
 if(TARGET imgui)
     target_include_directories(bo1zm PRIVATE $<TARGET_PROPERTY:imgui,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 if(WIN32)
     target_link_options(bo1zm PRIVATE "LINKER:/errorlimit:0")  # every missing symbol in one link
+    # Symbol map for crash triage (tools/crash_triage.py): native RVA -> sub_XXXXXXXX. Not shipped.
+    target_link_options(bo1zm PRIVATE "LINKER:/map:${CMAKE_BINARY_DIR}/bo1zm.map")
+    # PDB with line tables of the generated code (guest instruction of a fault). /debug drops the default
+    # /opt:ref,icf, so keep them on. The PDB stays in the build folder.
+    target_link_options(bo1zm PRIVATE "LINKER:/debug" "LINKER:/opt:ref" "LINKER:/opt:icf")
 endif()

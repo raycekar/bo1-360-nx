@@ -14,7 +14,7 @@ cmake -S "$ZM" -B "$OUT" -G Ninja \
   "-DCMAKE_TOOLCHAIN_FILE=$ROOT/cmake/windows-xwin.cmake" \
   -DCMAKE_BUILD_TYPE=Release \
   -DREXGLUE_BUILD_HOST_TOOLS=OFF -DREXGLUE_BUILD_TESTS=OFF -DREXGLUE_ENABLE_TRACY=OFF \
-  -DREXGLUE_USE_VULKAN=ON -DREXGLUE_RECOMP_DEBUG_INFO=none \
+  -DREXGLUE_USE_VULKAN=ON -DREXGLUE_RECOMP_DEBUG_INFO=line-tables-only \
   -DGIT_EXECUTABLE=/nonexistent/git "-DREXGLUE_OUTPUT_DIR=$OUT/sdk-out" \
   "-DREXSDK_DIR=$ROOT/sdk"
 # Low priority (nice 19, idle I/O) so the build does not slow other guests on the shared host.

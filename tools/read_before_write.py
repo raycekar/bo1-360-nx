@@ -227,6 +227,18 @@ KNOWN = {
     "sub_8282C2D8": "subfe r29,r29,r29: the result is -1 + CA whatever r29 held",
     "sub_82918CA0": "the game's setjmp itself (saves every register); every call goes through ppc_setjmp",
     "sub_8292FA64": "not code: the pointer 0x8292FA90 and a zero word before sub_8292FA6C, decoded as one lwz",
+    # BO1 TU11 default.xex (Zombies), checked 2026-11-27
+    "sub_824CC150": "BO1 ZM: xor r30,r30,r30 (zero whatever r30 held)",
+    "sub_824CC4E0": "BO1 ZM: VMX copy kernel: stvlx128 saves of v64/v65 and xor r30,r30,r30",
+    "sub_82514CC8": "BO1 ZM: subfe r29,r29,r29: the result is -1 + CA whatever r29 held",
+    "sub_825ED9E0": "BO1 ZM: the game's setjmp itself (saves every register); every call goes through ppc_setjmp",
+    "sub_825FE764": "BO1 ZM: not code: the pointer 0x825FE790 and a zero word, decoded as one lwz",
+    # BO1 TU11 default_mp.xex, checked 2026-11-27
+    "sub_8257BF04": "BO1 MP: VMX copy kernel: stvlx128 v64/v65 to the stack in its prologue (a save)",
+    "sub_8257C3D0": "BO1 MP: xor r30,r30,r30 (zero whatever r30 held)",
+    "sub_8257C760": "BO1 MP: VMX copy kernel: stvlx128 saves of v64/v65 and xor r30,r30,r30",
+    "sub_825C4F58": "BO1 MP: subfe r29,r29,r29: the result is -1 + CA whatever r29 held",
+    "sub_826B5450": "BO1 MP: the game's setjmp itself (saves every register); every call goes through ppc_setjmp",
 }
 
 

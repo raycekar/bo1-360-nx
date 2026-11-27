@@ -43,6 +43,7 @@ set(REXSYSTEM_SOURCES
     mmio_handler.cpp
     map_parser.cpp
     module.cpp
+    crash_report.cpp
     function_dispatcher.cpp
     gpu_plugin_loader.cpp
     thread.cpp
@@ -58,6 +59,10 @@ else()
     add_library(rexruntime SHARED ${REXSYSTEM_SOURCES})
 endif()
 add_library(rex::runtime ALIAS rexruntime)
+if(WIN32 AND NOT REXGLUE_PLATFORM_SWITCH)
+    # Symbol map for crash triage (tools/crash_triage.py). Not shipped.
+    target_link_options(rexruntime PRIVATE "LINKER:/map:${CMAKE_BINARY_DIR}/rexruntime.map")
+endif()
 add_library(rex::system ALIAS rexruntime)
 add_library(rex::kernel ALIAS rexruntime)
 
