@@ -46,6 +46,12 @@ class Bo1mpApp : public rex::ReXApp {
     if (rex::cvar::GetFlagSource("launch_title_map") == rex::cvar::Source::kDefault) {
       rex::cvar::SetFlagByName("launch_title_map", "default_mp.xex=bo1mp.exe;default.xex=bo1zm.exe");
     }
+    // As in bo1zm: no CPU readback of shader memexport (a full GPU sync per draw that the game never needs) and a
+    // texture cache sized for a PC GPU. GPU plugin settings, hence SetAppDefault (queued until the plugin loads).
+    rex::cvar::SetAppDefault("readback_memexport", "false");
+    rex::cvar::SetAppDefault("texture_cache_memory_limit_render_to_texture", "128");
+    rex::cvar::SetAppDefault("texture_cache_memory_limit_soft", "1024");
+    rex::cvar::SetAppDefault("texture_cache_memory_limit_hard", "2048");
   }
 
   // The SDK loads game:\\default.xex (Zombies and the campaign); Multiplayer is default_mp.xex.
