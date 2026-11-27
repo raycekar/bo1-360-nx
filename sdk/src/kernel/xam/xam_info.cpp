@@ -10,8 +10,10 @@
  */
 
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <vector>
 
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
@@ -29,11 +31,15 @@
 
 #if REX_PLATFORM_WIN32
 #include <windows.h>
+#include <shellapi.h>
 #endif
 
 #include <fmt/format.h>
 #include <fmt/xchar.h>
 
+REXCVAR_DEFINE_STRING(launch_data_file, "", "Kernel",
+                      "Set by XamLoaderLaunchTitle for the process it starts: the launch data of the previous "
+                      "process (read once, then deleted)");
 REXCVAR_DEFINE_STRING(launch_title_map, "", "Kernel",
                       "Guest exe -> host exe for XamLoaderLaunchTitle, such as "
                       "\"default_mp.xex=bo1mp.exe;default.xex=bo1zm.exe\". A match starts the host exe "
@@ -243,12 +249,36 @@ u32 XamLoaderSetLaunchData_entry(mapped_void data, u32 size) {
   return 0;
 }
 
+// Launch data handed over by the process that relaunched us (LaunchHostTitle): read once from launch_data_file, then
+// the file is deleted.
+static void LoadLaunchDataFile(XamModule* xam) {
+  static bool loaded = false;
+  if (loaded) return;
+  loaded = true;
+  const std::string path = REXCVAR_GET(launch_data_file);
+  if (path.empty()) return;
+  FILE* f = std::fopen(path.c_str(), "rb");
+  if (!f) return;
+  std::vector<uint8_t> data;
+  uint8_t chunk[4096];
+  for (size_t n; (n = std::fread(chunk, 1, sizeof(chunk), f)) > 0;) data.insert(data.end(), chunk, chunk + n);
+  std::fclose(f);
+  std::remove(path.c_str());
+  auto& loader_data = xam->loader_data();
+  if (!loader_data.launch_data_present && !data.empty()) {
+    loader_data.launch_data_present = true;
+    loader_data.launch_data = std::move(data);
+    REXKRNL_INFO("XamLoader: {} bytes of launch data from the previous process", loader_data.launch_data.size());
+  }
+}
+
 u32 XamLoaderGetLaunchDataSize_entry(mapped_u32 size_ptr) {
   if (!size_ptr) {
     return X_ERROR_INVALID_PARAMETER;
   }
 
   auto xam = REX_KERNEL_STATE()->GetKernelModule<XamModule>("xam.xex");
+  LoadLaunchDataFile(xam.get());
   auto& loader_data = xam->loader_data();
   if (!loader_data.launch_data_present) {
     *size_ptr = 0;
@@ -261,6 +291,7 @@ u32 XamLoaderGetLaunchDataSize_entry(mapped_u32 size_ptr) {
 
 u32 XamLoaderGetLaunchData_entry(mapped_void buffer_ptr, u32 buffer_size) {
   auto xam = REX_KERNEL_STATE()->GetKernelModule<XamModule>("xam.xex");
+  LoadLaunchDataFile(xam.get());
   auto& loader_data = xam->loader_data();
   if (!loader_data.launch_data_present) {
     return X_ERROR_NOT_FOUND;
@@ -299,6 +330,30 @@ static void LaunchHostTitle(const std::string& guest_path) {
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi{};
     std::wstring command = L"\"" + exe.wstring() + L"\"";
+    // Keep this process's own settings from the command line (test pads, overrides), except a launch data file.
+    {
+      int argc = 0;
+      LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+      for (int i = 1; argv && i < argc; ++i) {
+        std::wstring arg = argv[i];
+        if (arg.rfind(L"--launch_data_file", 0) == 0) continue;
+        command += L" \"" + arg + L"\"";
+      }
+      if (argv) LocalFree(argv);
+    }
+    // The launch data the 360 would hand to the next title (XamLoaderSetLaunchData) goes through a file.
+    auto xam_module = REX_KERNEL_STATE()->GetKernelModule<XamModule>("xam.xex");
+    if (xam_module && xam_module->loader_data().launch_data_present) {
+      const auto& data = xam_module->loader_data().launch_data;
+      const auto data_path = std::filesystem::temp_directory_path() /
+                             fmt::format("rex_launch_data_{}.bin", GetCurrentProcessId());
+      if (FILE* f = _wfopen(data_path.c_str(), L"wb")) {
+        std::fwrite(data.data(), 1, data.size(), f);
+        std::fclose(f);
+        command += L" \"--launch_data_file=" + data_path.wstring() + L"\"";
+        REXKRNL_INFO("XamLoaderLaunchTitle: passing {} bytes of launch data", data.size());
+      }
+    }
     if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, folder.c_str(), &si,
                         &pi)) {
       REXKRNL_ERROR("XamLoaderLaunchTitle: starting {} failed ({})", rex::path_to_utf8(exe), GetLastError());

@@ -16,6 +16,8 @@ set(BO1ZM_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../common/bo1_online.cpp
     src/bo1zm_local_players.cpp
     src/bo1zm_script_patch.cpp
+    src/bo1zm_debug.cpp
+    src/bo1zm_memory.cpp
 )
 
 if(WIN32)

@@ -15,13 +15,29 @@
 #include <cstring>
 
 #include <rex/assert.h>
+#include <rex/system/thread_state.h>
+#include <rex/system/xthread.h>
 #include <rex/kernel/xboxkrnl/private.h>
+#include <rex/system/thread_state.h>
+#include <rex/system/xthread.h>
 #include <rex/logging.h>
+#include <rex/system/thread_state.h>
+#include <rex/system/xthread.h>
 #include <rex/math.h>
+#include <rex/system/thread_state.h>
+#include <rex/system/xthread.h>
 #include <rex/hook.h>
+#include <rex/system/thread_state.h>
+#include <rex/system/xthread.h>
 #include <rex/types.h>
+#include <rex/system/thread_state.h>
+#include <rex/system/xthread.h>
 #include <rex/system/kernel_state.h>
+#include <rex/system/thread_state.h>
+#include <rex/system/xthread.h>
 #include <rex/system/xtypes.h>
+#include <rex/system/thread_state.h>
+#include <rex/system/xthread.h>
 
 namespace rex::kernel::xboxkrnl {
 using namespace rex::system;
@@ -403,6 +419,12 @@ u32 MmAllocatePhysicalMemoryEx_entry(u32 flags, u32 region_size, u32 protect_bit
     return 0;
   }
   REXKRNL_IMPORT_RESULT("MmAllocatePhysicalMemoryEx", "addr={:#x}", base_address);
+  if (adjusted_size >= 16 * 1024 * 1024) {
+    // Big pools (a game's own physical-memory allocator) are set up here once; log them for memory budgets.
+    auto* thread = rex::system::XThread::GetCurrentThread();
+    REXKRNL_INFO("MmAllocatePhysicalMemoryEx: {} MB at {:08X} (lr {:08X})", adjusted_size >> 20, base_address,
+                 thread && thread->thread_state() ? uint32_t(thread->thread_state()->context()->lr) : 0);
+  }
 
   return base_address;
 }
