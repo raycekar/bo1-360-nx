@@ -10,6 +10,8 @@
  */
 
 #include <atomic>
+#include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include <rex/chrono/clock.h>
@@ -31,6 +33,35 @@
 namespace rex::system {
 
 namespace {
+
+// Diagnostic for the hitch hunt: a guest wait with a real timeout (>= 50 ms) that runs out is logged with the guest
+// caller (lr) and the object type, at most once per second per caller. A fixed-length hitch (100 ms, ...) that comes
+// from a missed signal shows up here.
+void LogLongTimeout(const char* kind, std::chrono::milliseconds timeout, XObject* object) {
+  if (timeout.count() < 50 || timeout == std::chrono::milliseconds::max()) {
+    return;
+  }
+  uint32_t lr = 0, tid = 0;
+  if (auto* t = XThread::GetCurrentThread(); t && t->thread_state() && t->thread_state()->context()) {
+    lr = uint32_t(t->thread_state()->context()->lr);
+    tid = t->thread_id();
+  }
+  static std::mutex m;
+  static std::unordered_map<uint32_t, int64_t> last;
+  const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now().time_since_epoch())
+                          .count();
+  {
+    std::lock_guard lock(m);
+    auto& l = last[lr];
+    if (l && now - l < 1000) {
+      return;
+    }
+    l = now;
+  }
+  REXSYS_WARN("[waitout] {} timed out after {} ms: thread t{:X} lr {:08X} object type {}", kind,
+               timeout.count(), tid, lr, object ? int(object->type()) : -1);
+}
 
 // The handle stash in a guest dispatcher header, read by GetNativeObject without the global lock.
 // The handle (blink) is written first and the signature (flink) last with release order, so a reader that sees
@@ -254,6 +285,7 @@ X_STATUS XObject::Wait(uint32_t wait_reason, uint32_t processor_mode, uint32_t a
       if (!opt_timeout || *opt_timeout == 0) {
         rex::thread::MaybeYield();
       }
+      LogLongTimeout("Wait", timeout_ms, this);
       return X_STATUS_TIMEOUT;
     default:
     case rex::thread::WaitResult::kAbandoned:
@@ -326,6 +358,7 @@ X_STATUS XObject::WaitMultiple(uint32_t count, XObject** objects, uint32_t wait_
         return X_STATUS_USER_APC;
       case rex::thread::WaitResult::kTimeout:
         rex::thread::MaybeYield();
+        LogLongTimeout("WaitAny", timeout_ms, objects[0]);
         return X_STATUS_TIMEOUT;
       default:
       case rex::thread::WaitResult::kAbandoned:
@@ -348,6 +381,7 @@ X_STATUS XObject::WaitMultiple(uint32_t count, XObject** objects, uint32_t wait_
         return X_STATUS_USER_APC;
       case rex::thread::WaitResult::kTimeout:
         rex::thread::MaybeYield();
+        LogLongTimeout("WaitAll", timeout_ms, objects[0]);
         return X_STATUS_TIMEOUT;
       default:
       case rex::thread::WaitResult::kAbandoned:

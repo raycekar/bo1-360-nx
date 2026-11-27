@@ -253,7 +253,27 @@ bool D3D12Provider::Initialize() {
   // Choose the adapter.
   uint32_t adapter_index = 0;
   IDXGIAdapter1* adapter = nullptr;
-  while (dxgi_factory->EnumAdapters1(adapter_index, &adapter) == S_OK) {
+  // Default (-1): the high-performance GPU first. EnumAdapters1 lists the GPU driving the display first, which on
+  // hybrid laptops is the integrated one (a Ryzen iGPU ran Kino at 26 fps where the RTX 3060 next to it sat idle).
+  if (REXCVAR_GET(d3d12_adapter) == -1) {
+    IDXGIFactory6* dxgi_factory6 = nullptr;
+    if (SUCCEEDED(dxgi_factory->QueryInterface(IID_PPV_ARGS(&dxgi_factory6)))) {
+      for (UINT i = 0; dxgi_factory6->EnumAdapterByGpuPreference(
+                           i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter)) == S_OK;
+           ++i) {
+        DXGI_ADAPTER_DESC1 desc;
+        if (SUCCEEDED(adapter->GetDesc1(&desc)) && !(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) &&
+            SUCCEEDED(pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0,
+                                               _uuidof(ID3D12Device), nullptr))) {
+          break;
+        }
+        adapter->Release();
+        adapter = nullptr;
+      }
+      dxgi_factory6->Release();
+    }
+  }
+  while (!adapter && dxgi_factory->EnumAdapters1(adapter_index, &adapter) == S_OK) {
     DXGI_ADAPTER_DESC1 adapter_desc;
     if (SUCCEEDED(adapter->GetDesc1(&adapter_desc))) {
       if (SUCCEEDED(pfn_d3d12_create_device_(adapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device),

@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <mutex>
+#include <unordered_map>
 #include <chrono>
 #include <cstring>
 
@@ -1188,6 +1190,22 @@ X_STATUS XThread::Delay(uint32_t processor_mode, uint32_t alertable, uint64_t in
   }
   timeout_ms = chrono::Clock::ScaleGuestDurationMillis(timeout_ms);
   CheckTitleTermination();
+  if (timeout_ms >= 50 && thread_state() && thread_state()->context()) {
+    // Hitch hunt: long guest sleeps, once per second per caller.
+    static std::mutex m;
+    static std::unordered_map<uint32_t, int64_t> last;
+    const uint32_t lr = uint32_t(thread_state()->context()->lr);
+    const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count();
+    std::lock_guard lock(m);
+    auto& l = last[lr];
+    if (!l || now - l >= 1000) {
+      l = now;
+      REXSYS_WARN("[sleep] t{:X} ({}) sleeps {} ms, lr {:08X}", thread_id(), thread_name_, timeout_ms,
+                   lr);
+    }
+  }
   if (alertable) {
     const bool reported = timeout_ms > 0 && DelayReported(thread_name_);
     const auto before = std::chrono::steady_clock::now();
