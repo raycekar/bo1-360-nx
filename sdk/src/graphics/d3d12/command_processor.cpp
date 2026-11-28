@@ -68,6 +68,8 @@ REXCVAR_DEFINE_BOOL(d3d12_submit_on_primary_buffer_end, true, "GPU/D3D12",
                     "Submit command list when PM4 primary buffer ends")
     .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;  // this DLL's base, for caller offsets in logs
+
 namespace rex::graphics::d3d12 {
 
 // Generated with `xb buildshaders`.
@@ -3165,7 +3167,16 @@ void D3D12CommandProcessor::CheckSubmissionFence(uint64_t await_submission) {
     if (SUCCEEDED(
             submission_fence_->SetEventOnCompletion(await_submission, fence_completion_event_))) {
       PROFILE_CMD_BUFFER_STALL();
+      const auto wait_start = std::chrono::steady_clock::now();
       WaitForSingleObject(fence_completion_event_, INFINITE);
+      const double wait_ms =
+          std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - wait_start).count();
+      if (wait_ms >= 10.0) {
+        // Hitch hunt: a long CPU wait for the GPU, with the caller (offset in this DLL, for llvm-symbolizer).
+        REXGPU_WARN("[gpu-wait] {:.1f} ms for submission {} (current {}), caller +{:X}", wait_ms,
+                    await_submission, submission_current_,
+                    uintptr_t(__builtin_return_address(0)) - uintptr_t(&__ImageBase));
+      }
       submission_completed_ = submission_fence_->GetCompletedValue();
     }
   }

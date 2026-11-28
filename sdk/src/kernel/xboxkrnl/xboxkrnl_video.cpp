@@ -641,10 +641,15 @@ static void HostSamplerLoop() {
       std::unordered_map<std::string, uint32_t> during;
       uint32_t total = 0;
       for (auto& [t, key] : recent) {
-        if (t >= from) {
-          ++during[key];
-          ++total;
-        }
+        if (t < from) continue;
+        ++total;
+        // Idle waits only for the guest main thread and the GPU thread (what they wait on matters in a hitch).
+        const bool idle = key.find("Wait") != std::string::npos || key.find("Delay") != std::string::npos ||
+                          key.find("GetMessage") != std::string::npos ||
+                          key.find("FsControlFile") != std::string::npos ||
+                          key.find("RemoveIoCompletion") != std::string::npos;
+        if (idle && key.rfind("t6 ", 0) != 0 && key.rfind("t3 ", 0) != 0) continue;
+        ++during[key];
       }
       std::vector<std::pair<std::string, uint32_t>> top(during.begin(), during.end());
       const size_t n = std::min<size_t>(25, top.size());
