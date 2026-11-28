@@ -44,6 +44,15 @@ From `work/ff/patch_ui.zone` (decoded zone, big-endian, pointers to inline data 
 4. Pages: GRAPHICS (preset, then per-item), CHEATS (god mode, infinite ammo, speed, jump, FOV, third person, game
    speed, ...). Values in port dvars applied by bo1zm_options.cpp; saved in user/bo1zm_settings.txt.
 
+## Live memory (Zombies, front end loaded; test pipe `find` / `findptr` / `peek`)
+
+- The label `@MENU_LOOK_INVERSION_CAPS` sits at A2251DFC and A2571CA4 (the two UI zones; addresses change per run).
+- A2251DEC points at the first copy's label: the label field holds a pointer to inline text right after the item
+  data. Nearby fields: a pointer to the source file name (`ui\ingame_options.menu`, so this copy is the in-match
+  Options), its line (0x17B = 379), pointers to the event-handler blocks, the rect floats (22.0, 0.315).
+- Next: walk back to the item's start (the window name `options_2` and its rect), find the next item (same layout)
+  to get the item size, then the menuDef that holds the item pointer array.
+
 Open questions: where the dvar binding and the choice list (dvarStrList) sit in itemDef_t; how the UI finds a menu by
 name (menu list in uiInfo / the loaded MenuList assets); whether the front end and the in-match pause menu use the
 same Options asset.

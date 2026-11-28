@@ -11,7 +11,10 @@
 
 #include "bo1zm_console.h"
 
+#include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <string_view>
 #include <cstring>
 #include <deque>
 #include <mutex>
@@ -19,6 +22,14 @@
 #include <unordered_map>
 
 #include <fmt/format.h>
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 
 #include <rex/hook.h>
 #include <rex/input/script/script_input_driver.h>
@@ -101,6 +112,61 @@ struct RegisterDvarPipe {
     });
   }
 } g_register_dvar_pipe;
+
+// Memory research on the test pipe: "find <text>" lists up to 16 guest addresses of that text (the physical-memory
+// ranges where zones load), "peek <hex address> <bytes>" dumps guest memory, "peek32 <hex address> <words>" as words.
+// Up to 16 guest addresses where `needle` occurs (virtual heaps, the image, physical memory where PMem and zones live).
+std::string FindBytes(std::string_view needle) {
+  if (!g_base || needle.empty()) return "error no game memory yet";
+  std::string out;
+  int found = 0;
+  for (const auto& [lo, hi] : {std::pair<uint32_t, uint32_t>{0x40000000u, 0x50000000u},
+                               std::pair<uint32_t, uint32_t>{0x82000000u, 0x84000000u},
+                               std::pair<uint32_t, uint32_t>{0xA0000000u, 0xC0000000u}}) {
+    MEMORY_BASIC_INFORMATION mbi;
+    for (uint64_t a = lo; a < hi && found < 16;) {
+      if (!VirtualQuery(g_base + a, &mbi, sizeof(mbi))) break;
+      const uint64_t region_end =
+          std::min<uint64_t>(hi, uint64_t(reinterpret_cast<uint8_t*>(mbi.BaseAddress) + mbi.RegionSize - g_base));
+      if (mbi.State == MEM_COMMIT && !(mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))) {
+        std::string_view hay(reinterpret_cast<const char*>(g_base + a), size_t(region_end - a));
+        for (size_t at = hay.find(needle); at != std::string_view::npos && found < 16; at = hay.find(needle, at + 1)) {
+          out += fmt::format("{:08X} ", uint32_t(a + at));
+          ++found;
+        }
+      }
+      a = region_end;
+    }
+  }
+  return found ? out : "none";
+}
+
+struct RegisterMemPipe {
+  RegisterMemPipe() {
+    // "findptr <hex address>": where that guest address is stored (big-endian), e.g. which struct points at a string.
+    rex::input::script::RegisterCommand("findptr", [](const std::string& args) -> std::string {
+      uint32_t value = 0;
+      if (std::sscanf(args.c_str(), "%x", &value) != 1) return "error usage: findptr <hex>";
+      const uint32_t be = __builtin_bswap32(value);
+      return FindBytes(std::string_view(reinterpret_cast<const char*>(&be), 4));
+    });
+    rex::input::script::RegisterCommand("find", [](const std::string& text) -> std::string { return FindBytes(text); });
+    rex::input::script::RegisterCommand("peek", [](const std::string& args) -> std::string {
+      uint32_t addr = 0, len = 64;
+      if (!g_base || std::sscanf(args.c_str(), "%x %u", &addr, &len) < 1) return "error usage: peek <hex> <n>";
+      len = std::min<uint32_t>(len, 1024);
+      MEMORY_BASIC_INFORMATION mbi;
+      if (!VirtualQuery(g_base + addr, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT) return "error not mapped";
+      std::string out;
+      for (uint32_t i = 0; i < len; ++i) {
+        if (i % 32 == 0) out += fmt::format("|{:08X}:", addr + i);
+        if (i % 4 == 0) out += ' ';
+        out += fmt::format("{:02X}", g_base[addr + i]);
+      }
+      return out;
+    });
+  }
+} g_register_mem_pipe;
 }  // namespace
 
 namespace bo1zm {
