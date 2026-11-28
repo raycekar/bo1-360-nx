@@ -1,0 +1,18 @@
+# In game: walk, look around, shoot (pad 0). Run after zm_solo_kino.txt.
+stick 0 L 0 1 2500
+stick 0 R 1 0 800
+stick 0 L 0 1 2000
+trig 0 R 150
+wait 300
+trig 0 R 150
+stick 0 R -1 0 1600
+stick 0 L 0.7 0.7 2500
+shot dev\out\move1.png
+stick 0 R 1 0.3 1200
+stick 0 L 0 1 3000
+trig 0 R 150
+shot dev\out\move2.png
+stick 0 L 0 -1 3000
+stick 0 R -1 0 2000
+stick 0 L 1 0 3000
+shot dev\out\move3.png

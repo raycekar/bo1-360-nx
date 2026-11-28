@@ -9,13 +9,18 @@ Focus: Zombies with **four-player local split screen**, and Multiplayer. Campaig
 
 ## Status
 
-- **Research**: four-player Zombies is feasible; the limit is the menus' `party_maxlocalplayers 2`
-  ([docs/4p-zombies-research.md](docs/4p-zombies-research.md)).
-- **Zombies program** (`zm/`, TU11 `default.xex`): recompiled (18,436 functions) and cross-built for Windows with
-  the exact Xenos GPU renderer. The 4-player change is in (`zm/src/bo1zm_local_players.cpp`). **Not yet run.**
-- Multiplayer (`default_mp.xex`): not started.
+- **Zombies** (`zm/`, TU11 `default.xex`): every map plays; solo ~57-60 fps with zombies. **Split screen for 3 and 4
+  players works** (~50 and ~43 fps on an RTX 3060 laptop; the 360 allowed 2).
+- **Multiplayer** (`mp/`, `default_mp.xex`): plays; solo 58-60 fps, 4-player split screen ~25 fps.
+- **System Link** works (tested with two copies on one PC); internet play with a join code is in, not yet tested.
+- **Port extras**: graphics presets (lowest to ultra), god mode, "BUILDING SHADERS" text. In-game options/cheats
+  pages are in progress.
 
-Building: [docs/building.md](docs/building.md).
+Details, settings and findings: [docs/pc-port-notes.md](docs/pc-port-notes.md). Research:
+[docs/4p-zombies-research.md](docs/4p-zombies-research.md).
+
+Building: [docs/building-windows.md](docs/building-windows.md) (native Windows) or [docs/building.md](docs/building.md)
+(Linux cross-build).
 
 ## Based on
 

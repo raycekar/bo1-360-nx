@@ -1,0 +1,12 @@
+# From launch to the Zombies System Link screen (pad 0).
+wait 45000
+press 0 START
+wait 3000
+press 0 DOWN
+press 0 DOWN
+press 0 A
+wait 3000
+press 0 DOWN
+press 0 DOWN
+press 0 A
+wait 5000

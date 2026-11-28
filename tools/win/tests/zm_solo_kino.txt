@@ -1,0 +1,16 @@
+# From launch to Kino der Toten solo (player 1 = pad 0). Run: py -I tools\bo1ctl.py run tests\zm_solo_kino.txt
+wait 45000
+press 0 START
+wait 3000
+press 0 DOWN
+press 0 DOWN
+press 0 A
+wait 3000
+press 0 DOWN
+press 0 DOWN
+press 0 DOWN
+press 0 A
+wait 3000
+press 0 A
+wait 40000
+shot dev\out\kino_solo.png

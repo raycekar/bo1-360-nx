@@ -1,0 +1,7 @@
+# From launch (run.ps1 mp -Pads N) to a split-screen match on Array (TDM). Extra pads: add "press N A" before the start.
+wait 45000
+press 0 DOWN
+press 0 A
+wait 3000
+press 0 A
+wait 4000

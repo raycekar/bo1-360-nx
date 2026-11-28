@@ -1,0 +1,19 @@
+# From launch (run.ps1 zm -Pads 4) to Kino der Toten, 4-player split screen.
+wait 45000
+press 0 START
+wait 3000
+press 0 DOWN
+press 0 DOWN
+press 0 A
+wait 3000
+press 0 DOWN
+press 0 A
+wait 4000
+press 1 A
+wait 1500
+press 2 A
+wait 1500
+press 3 A
+wait 2500
+shot dev\out\ss_lobby.png
+press 0 A
