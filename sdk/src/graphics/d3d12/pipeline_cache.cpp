@@ -26,6 +26,7 @@
 #include <fmt/format.h>
 
 #include <rex/assert.h>
+#include <rex/graphics/shader_progress.h>
 #include <rex/chrono/clock.h>
 #include <rex/cvar.h>
 #include <rex/dbg.h>
@@ -64,6 +65,18 @@ REXCVAR_DEFINE_BOOL(d3d12_tessellation_wireframe, false, "GPU/D3D12",
                     "Render tessellation as wireframe");
 
 namespace rex::graphics::d3d12 {
+
+namespace {
+// Progress for the on-screen text (rex/graphics/shader_progress.h).
+void NoteShaderQueued() { GetShaderProgress().queued.fetch_add(1, std::memory_order_relaxed); }
+void NoteShaderBuilt() {
+  auto& progress = GetShaderProgress();
+  progress.created.fetch_add(1, std::memory_order_relaxed);
+  if (progress.startup.load(std::memory_order_relaxed)) {
+    progress.startup_created.fetch_add(1, std::memory_order_relaxed);
+  }
+}
+}  // namespace
 
 // Generated with `xb buildshaders`.
 namespace shaders {
@@ -543,6 +556,13 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
     }
 
     size_t pipelines_created = 0;
+    {
+      // On-screen "BUILDING SHADERS" while the stored pipelines are created before the game goes on.
+      auto& progress = GetShaderProgress();
+      progress.startup_total.store(uint32_t(pipeline_stored_descriptions.size()), std::memory_order_relaxed);
+      progress.startup_created.store(0, std::memory_order_relaxed);
+      progress.startup.store(true, std::memory_order_release);
+    }
     for (const PipelineStoredDescription& pipeline_stored_description :
          pipeline_stored_descriptions) {
       const PipelineDescription& pipeline_description = pipeline_stored_description.description;
@@ -642,6 +662,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
         {
           std::lock_guard<std::mutex> lock(creation_request_lock_);
           creation_queue_.push(new_pipeline);
+          NoteShaderQueued();
         }
         creation_request_cond_.notify_one();
       } else {
@@ -686,6 +707,7 @@ void PipelineCache::InitializeShaderStorage(const std::filesystem::path& cache_r
       }
     }
 
+    GetShaderProgress().startup.store(false, std::memory_order_release);
     REXGPU_INFO(
         "Created {} graphics pipelines (not including reading the "
         "descriptions) from the storage in {} milliseconds",
@@ -1039,6 +1061,7 @@ bool PipelineCache::ConfigurePipeline(
     {
       std::lock_guard<std::mutex> lock(creation_request_lock_);
       creation_queue_.push(new_pipeline);
+      NoteShaderQueued();
     }
     creation_request_cond_.notify_one();
   } else {
@@ -3248,6 +3271,7 @@ void PipelineCache::CreationThread(size_t thread_index) {
       pipeline_to_create->state.store(CreateD3D12Pipeline(runtime_description),
                                       std::memory_order_release);
     }
+    NoteShaderBuilt();
 
     // Pipeline created - the thread is not busy anymore, safe to set the
     // completion event if needed (at the next iteration, or in some other
@@ -3274,10 +3298,12 @@ void PipelineCache::CreateQueuedPipelinesOnProcessorThread() {
     PipelineRuntimeDescription runtime_description;
     if (!PrepareRuntimeDescriptionForQueuedCreation(pipeline_to_create, runtime_description)) {
       pipeline_to_create->state.store(nullptr, std::memory_order_release);
+      NoteShaderBuilt();
       continue;
     }
     pipeline_to_create->state.store(CreateD3D12Pipeline(runtime_description),
                                     std::memory_order_release);
+    NoteShaderBuilt();
   }
 }
 

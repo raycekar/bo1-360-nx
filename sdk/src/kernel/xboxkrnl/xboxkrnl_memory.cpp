@@ -18,26 +18,12 @@
 #include <rex/system/thread_state.h>
 #include <rex/system/xthread.h>
 #include <rex/kernel/xboxkrnl/private.h>
-#include <rex/system/thread_state.h>
-#include <rex/system/xthread.h>
 #include <rex/logging.h>
-#include <rex/system/thread_state.h>
-#include <rex/system/xthread.h>
 #include <rex/math.h>
-#include <rex/system/thread_state.h>
-#include <rex/system/xthread.h>
 #include <rex/hook.h>
-#include <rex/system/thread_state.h>
-#include <rex/system/xthread.h>
 #include <rex/types.h>
-#include <rex/system/thread_state.h>
-#include <rex/system/xthread.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/thread_state.h>
-#include <rex/system/xthread.h>
 #include <rex/system/xtypes.h>
-#include <rex/system/thread_state.h>
-#include <rex/system/xthread.h>
 
 namespace rex::kernel::xboxkrnl {
 using namespace rex::system;

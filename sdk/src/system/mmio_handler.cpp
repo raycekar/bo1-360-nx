@@ -13,38 +13,18 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
-#include <atomic>
-#include <chrono>
 #include <utility>
-#include <atomic>
-#include <chrono>
 
 #include <rex/assert.h>
-#include <atomic>
-#include <chrono>
 #include <rex/exception_handler.h>
-#include <atomic>
-#include <chrono>
 #include <rex/logging.h>
-#include <atomic>
-#include <chrono>
 #include <rex/memory.h>
-#include <atomic>
-#include <chrono>
 #include <rex/platform.h>
-#include <atomic>
-#include <chrono>
 #include <rex/system/mmio_handler.h>
-#include <atomic>
-#include <chrono>
 #include <rex/types.h>
-#include <atomic>
-#include <chrono>
 
 #if REX_PLATFORM_WIN32
 #include <windows.h>
-#include <atomic>
-#include <chrono>
 #endif
 
 using namespace rex::arch;

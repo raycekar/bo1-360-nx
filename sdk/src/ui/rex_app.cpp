@@ -33,6 +33,11 @@
 #endif
 #include <rex/input/input_system.h>
 #include <rex/input/script/script_input_driver.h>
+#include <rex/graphics/shader_progress.h>
+#include <rex/ui/imgui_dialog.h>
+#include <rex/ui/imgui_drawer.h>
+#include <cmath>
+#include <thread>
 #include <rex/ui/presenter.h>
 #include <fstream>
 #include <rex/kernel/init.h>
@@ -148,7 +153,65 @@ uint32_t PngCrc(const uint8_t* p, size_t n, uint32_t c = 0xFFFFFFFFu) {
   return bool(f);
 }
 
+// "BUILDING SHADERS": a full-width band at the top while the stored pipelines are created at startup (with a
+// progress bar), and a small line there while new ones are built during play (things can be missing meanwhile).
+class ShaderProgressDialog final : public rex::ui::ImGuiDialog {
+ public:
+  explicit ShaderProgressDialog(rex::ui::ImGuiDrawer* drawer) : ImGuiDialog(drawer) {}
+
+ protected:
+  void OnDraw(ImGuiIO& io) override {
+    auto& progress = rex::graphics::GetShaderProgress();
+    const bool startup = progress.startup.load(std::memory_order_acquire);
+    const ImVec2 size = io.DisplaySize;
+    const float unit = std::max(1.0f, size.y / 720.0f);
+    const float scale = std::max(1.0f, std::round((startup ? 2.0f : 1.5f) * unit));
+    const float height = std::floor((startup ? 58.0f : 26.0f) * unit);
+    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+    ImGui::SetNextWindowSize(ImVec2(size.x, height));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, startup ? 230 : 150));
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(230, 140, 20, 255));
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+                                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing;
+    if (ImGui::Begin("##shader_progress", nullptr, flags)) {
+      char text[96];
+      if (startup) {
+        const uint32_t total = progress.startup_total.load(std::memory_order_relaxed);
+        const uint32_t done = std::min(progress.startup_created.load(std::memory_order_relaxed), total);
+        std::snprintf(text, sizeof(text), "BUILDING SHADERS  %u / %u", done, total);
+      } else {
+        const uint32_t pending = progress.pending();
+        if (pending) {
+          std::snprintf(text, sizeof(text), "Building shaders (%u)", pending);
+        } else {
+          std::snprintf(text, sizeof(text), "Building shaders");
+        }
+      }
+      ImGui::SetWindowFontScale(scale);
+      const ImVec2 extent = ImGui::CalcTextSize(text);
+      ImGui::SetCursorPos(ImVec2(std::floor((size.x - extent.x) * 0.5f), std::floor(4.0f * unit)));
+      ImGui::TextUnformatted(text);
+      if (startup) {
+        const uint32_t total = progress.startup_total.load(std::memory_order_relaxed);
+        const uint32_t done = std::min(progress.startup_created.load(std::memory_order_relaxed), total);
+        const float width = std::floor(size.x * 0.5f);
+        ImGui::SetCursorPos(ImVec2(std::floor((size.x - width) * 0.5f), std::floor(height - 18.0f * unit)));
+        ImGui::ProgressBar(total ? float(done) / float(total) : 0.0f, ImVec2(width, std::floor(10.0f * unit)), "");
+      }
+    }
+    ImGui::End();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
+  }
+};
+
 }  // namespace
+
+REXCVAR_DEFINE_BOOL(show_shader_progress, true, "UI",
+                    "Show \"BUILDING SHADERS\" at the top of the screen while shaders / pipelines are being built");
 
 namespace rex {
 
@@ -559,6 +622,33 @@ void ReXApp::SetupOverlays(rex::ui::Presenter* presenter, rex::ui::ImmediateDraw
   });
 
   OnCreateDialogs(imgui_drawer_.get());
+
+  if (REXCVAR_GET(show_shader_progress) && presenter) {
+    shader_watch_ = std::thread([this] {
+      using clock = std::chrono::steady_clock;
+      auto& progress = rex::graphics::GetShaderProgress();
+      bool shown = false;
+      auto last_active = clock::now();
+      while (!shader_watch_stop_) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        const bool active = progress.startup.load(std::memory_order_acquire) || progress.pending() > 0;
+        const auto now = clock::now();
+        if (active) last_active = now;
+        // Shown while building, and 1.5 s after, so short bursts during play do not flicker.
+        const bool want = active || (shown && now - last_active < std::chrono::milliseconds(1500));
+        if (want != shown) {
+          shown = want;
+          app_context().CallInUIThread([this, want] {
+            if (want && !shader_overlay_ && imgui_drawer_) {
+              shader_overlay_ = std::make_unique<ShaderProgressDialog>(imgui_drawer_.get());
+            } else if (!want) {
+              shader_overlay_.reset();
+            }
+          });
+        }
+      }
+    });
+  }
 }
 
 void ReXApp::LaunchModule() {
@@ -738,6 +828,9 @@ void ReXApp::OnDestroy() {
     achievement_notification_listener_ = 0;
   }
   achievement_notification_.reset();
+  shader_watch_stop_ = true;
+  if (shader_watch_.joinable()) shader_watch_.join();
+  shader_overlay_.reset();
   achievements_overlay_.reset();
   settings_overlay_.reset();
   console_overlay_.reset();

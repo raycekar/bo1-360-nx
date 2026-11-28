@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <thread>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -320,6 +321,12 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
   std::unique_ptr<ui::ConsoleDialog> console_overlay_;
   std::unique_ptr<ui::SettingsDialog> settings_overlay_;
   std::unique_ptr<ui::ImGuiDialog> achievements_overlay_;
+  // "BUILDING SHADERS" at the top while pipelines are built (rex/graphics/shader_progress.h); a watcher thread opens
+  // and closes it on the UI thread, so no dialog exists (and the presenter keeps presenting from the game thread)
+  // the rest of the time.
+  std::unique_ptr<ui::ImGuiDialog> shader_overlay_;
+  std::thread shader_watch_;
+  std::atomic<bool> shader_watch_stop_{false};
   std::shared_ptr<ui::AchievementNotificationDialog> achievement_notification_;
   uint64_t achievement_notification_listener_ = 0;
   ui::DebugOverlayDialog::FrameStatsProvider frame_stats_provider_;
