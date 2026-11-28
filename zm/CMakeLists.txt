@@ -20,6 +20,7 @@ set(BO1ZM_SOURCES
     src/bo1zm_memory.cpp
     src/bo1zm_jobs.cpp
     src/bo1zm_console.cpp
+    src/bo1zm_options.cpp
 )
 
 if(WIN32)

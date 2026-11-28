@@ -109,6 +109,18 @@ uint32_t FindDvar(const std::string& name) {
   auto it = g_dvars.find(Lower(name));
   return it == g_dvars.end() ? 0 : it->second;
 }
+
+bool DvarNumber(const std::string& name, double* out) {
+  const uint32_t dvar = FindDvar(name);
+  if (!dvar || !g_base) return false;
+  auto u32 = [&](uint32_t a) { return __builtin_bswap32(*reinterpret_cast<uint32_t*>(g_base + a)); };
+  switch (u32(dvar + 16)) {
+    case 0: *out = g_base[dvar + 24] ? 1.0 : 0.0; return true;
+    case 1: { uint32_t bits = u32(dvar + 24); float f; std::memcpy(&f, &bits, 4); *out = f; return true; }
+    case 5: case 6: *out = int32_t(u32(dvar + 24)); return true;
+    default: return false;
+  }
+}
 }  // namespace bo1zm
 
 REX_EXTERN(__imp__sub_8237AD78);
@@ -125,6 +137,7 @@ REX_HOOK_RAW(sub_8237AD78) {  // Dvar_RegisterVariant
 REX_EXTERN(__imp__sub_823112E0);
 REX_EXTERN(__imp__sub_82315590);
 REX_HOOK_RAW(sub_82315590) {  // Com_Frame
+  bo1zm::OptionsTick();
   std::deque<std::string> lines;
   {
     std::lock_guard lock(g_mutex);
