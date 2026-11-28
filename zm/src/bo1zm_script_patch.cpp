@@ -18,6 +18,9 @@
 REXCVAR_DEFINE_BOOL(bo1zm_splitscreen_fog, true, "BO1",
                     "Zombies split screen: keep the Xbox 360's closer fog and cull distance. false = full view distance.");
 
+REXCVAR_DEFINE_BOOL(bo1zm_god, false, "BO1 cheats",
+                    "God mode: players take no damage (applied when a match loads its scripts)");
+
 namespace {
 
 constexpr size_t kMaxScript = 8u << 20;
@@ -39,6 +42,22 @@ bool PatchAfter(char* text, size_t len, size_t start, size_t window, std::string
   std::memcpy(p, to.data(), to.size());
   std::memset(p + to.size(), ' ', from.size() - to.size());
   return true;
+}
+
+// bo1zm_god: maps/_zombiemode::player_damage_override starts with
+//   iDamage = self check_player_damage_callbacks( ... );  if ( !iDamage ) { return 0; }
+// The first line becomes "iDamage = 0;", so players take no damage (zombies, falls, explosions, their own grenades).
+void PatchGodMode(char* text, size_t len) {
+  std::string_view all(text, len);
+  const size_t def = all.find("\nplayer_damage_override(");
+  if (def == std::string_view::npos) return;
+  constexpr std::string_view kFrom =
+      "iDamage = self check_player_damage_callbacks( eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, "
+      "sWeapon, vPoint, vDir, sHitLoc, modelIndex, psOffsetTime );";
+  if (PatchAfter(text, len, def, 600, kFrom, "iDamage = 0;"))
+    REXLOG_INFO("bo1zm: god mode on (players take no damage)");
+  else
+    REXLOG_WARN("bo1zm: player_damage_override found but not its first line; god mode not applied");
 }
 
 void PatchSplitscreenFog(char* text, size_t len) {
@@ -64,4 +83,6 @@ REX_HOOK_RAW(sub_824267F0) {  // Scr_AddSourceBuffer
 
   if (!REXCVAR_GET(bo1zm_splitscreen_fog) && (name == "maps/_utility" || name == "maps\\_utility"))
     PatchSplitscreenFog(text, len);
+  if (REXCVAR_GET(bo1zm_god) && (name == "maps/_zombiemode" || name == "maps\\_zombiemode"))
+    PatchGodMode(text, len);
 }
